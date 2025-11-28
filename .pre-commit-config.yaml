@@ -1,0 +1,16 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+
+  - repo: local
+    hooks:
+      - id: check-kernel-imports
+        name: Enforce Kernel Purity
+        entry: python scripts/check_kernel_imports.py
+        language: python
+        types: [python]
+        pass_filenames: false
