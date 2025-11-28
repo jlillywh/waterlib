@@ -62,8 +62,16 @@ class Model:
         self.graph: Optional[nx.DiGraph] = None
         self.execution_order: List[str] = []
 
+        # Track data connections for pre-step data transfer
+        # Format: list of (source_comp, output_name, target_comp, input_name) tuples
+        self.data_connections: List[tuple] = []
+
         # Initialize climate manager if climate settings are present
         self.climate_manager: Optional[ClimateManager] = None
+
+        # Initialize DriverRegistry once (not in the loop!)
+        from waterlib.core.drivers import DriverRegistry
+        self.drivers = DriverRegistry()
 
         climate_config = None
         if self.settings.climate is not None:
@@ -212,14 +220,64 @@ class Model:
         except nx.NetworkXError as e:
             raise ValueError(f"Model contains circular dependencies: {e}")
 
+    def _transfer_data(self) -> None:
+        """Transfer data between components before timestep execution.
+
+        This method implements the Pre-Step Data Transfer phase that moves
+        output data from source components to input dictionaries of target
+        components. This must be called before executing component.step()
+        methods to ensure components have access to data from their dependencies.
+
+        The method handles three types of connections:
+        1. Explicit 'inflows' connections (multiple sources, aggregated)
+        2. Single 'source' connections (e.g., Demand -> Reservoir)
+        3. Registered data_connections (formal connection tracking)
+
+        This ensures that component outputs from the previous timestep (or
+        initialization) are available as inputs to dependent components.
+        """
+        # Clear all component inputs for this timestep
+        for component in self.components.values():
+            component.inputs = {}
+
+        # Handle 'inflows' attribute (list of source components)
+        # Used by Junction and Reservoir components
+        for component in self.components.values():
+            if hasattr(component, 'inflow_getters') and component.inflow_getters:
+                for idx, (source_comp, output_name) in enumerate(component.inflow_getters, 1):
+                    # Get the value from source component's outputs
+                    value = source_comp.outputs.get(output_name, 0.0)
+                    # Store in target component's inputs with indexed name
+                    input_key = f'inflow_{idx}'
+                    component.inputs[input_key] = value
+
+        # Handle 'source' attribute (single source component)
+        # Used by Demand component to get available supply from Reservoir
+        for component in self.components.values():
+            if hasattr(component, 'source') and component.source is not None:
+                source_comp = component.source
+                # Map reservoir output to demand input
+                # Demand expects 'available_supply' input
+                # Get 'outflow' from source (could be storage, release, or outflow)
+                available_supply = source_comp.outputs.get('outflow',
+                                   source_comp.outputs.get('release',
+                                   source_comp.outputs.get('storage', 0.0)))
+                component.inputs['available_supply'] = available_supply
+
+        # Handle formal data_connections (if registered by loader)
+        for source_comp, output_name, target_comp, input_name in self.data_connections:
+            value = source_comp.outputs.get(output_name, 0.0)
+            target_comp.inputs[input_name] = value
+
     def step(self, date: datetime) -> Dict[str, Dict[str, Any]]:
         """Execute one simulation timestep for all components.
 
         This method:
         1. Gets climate data from ClimateManager (if available)
-        2. Wraps climate data in a DriverRegistry for component access
-        3. Executes each component's step() method in topological order
-        4. Collects and returns all component outputs
+        2. Updates the persistent DriverRegistry with current timestep data
+        3. Transfers data between components (Pre-Step Data Transfer phase)
+        4. Executes each component's step() method in topological order
+        5. Collects and returns all component outputs
 
         Args:
             date: Current simulation date
@@ -227,32 +285,33 @@ class Model:
         Returns:
             Dictionary mapping component names to their output dictionaries
         """
-        # Create DriverRegistry with climate data
-        from waterlib.core.drivers import DriverRegistry, SimpleDriver
-
-        drivers = DriverRegistry()
+        # Update climate data in the persistent DriverRegistry
+        from waterlib.core.drivers import SimpleDriver
 
         if self.climate_manager:
             climate_data = self.climate_manager.get_climate_data(date)
 
-            # Register climate drivers with the data for this timestep
+            # Register/update climate drivers with the data for this timestep
             if 'precipitation' in climate_data:
-                drivers.register('precipitation', SimpleDriver(climate_data['precipitation']))
+                self.drivers.register('precipitation', SimpleDriver(climate_data['precipitation']))
             if 'tmin' in climate_data and 'tmax' in climate_data:
                 # Temperature driver provides avg temp for compatibility
                 tavg = (climate_data['tmin'] + climate_data['tmax']) / 2.0
-                drivers.register('temperature', SimpleDriver(tavg))
+                self.drivers.register('temperature', SimpleDriver(tavg))
             if 'pet' in climate_data:
-                drivers.register('et', SimpleDriver(climate_data['pet']))
+                self.drivers.register('et', SimpleDriver(climate_data['pet']))
 
         # Execute components in order
         if not self.execution_order:
             self.compute_execution_order()
 
+        # Transfer data between components before execution
+        self._transfer_data()
+
         results = {}
         for comp_name in self.execution_order:
             component = self.components[comp_name]
-            outputs = component.step(date, drivers)
+            outputs = component.step(date, self.drivers)
             results[comp_name] = outputs
 
         return results

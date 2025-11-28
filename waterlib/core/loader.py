@@ -646,6 +646,44 @@ def validate_settings(settings: Dict[str, Any]) -> ModelSettings:
         raise ConfigurationError(f"Error parsing settings: {str(e)}")
 
 
+def _register_data_connections(model):
+    """Extract and register formal data connections from component attributes.
+
+    This function analyzes component attributes (inflow_getters, source) and
+    populates model.data_connections with explicit (source, output, target, input)
+    tuples. This provides a formal record of all data dependencies.
+
+    Args:
+        model: Model instance with instantiated components
+
+    Note:
+        Currently, most connections are handled implicitly via _transfer_data()
+        reading component attributes. This function creates an explicit registry
+        for future use (e.g., debugging, visualization, optimization).
+    """
+    data_connections = []
+
+    for comp_name, component in model.components.items():
+        # Handle 'inflows' connections
+        if hasattr(component, 'inflow_getters') and component.inflow_getters:
+            for idx, (source_comp, output_name) in enumerate(component.inflow_getters, 1):
+                # Register: (source_comp, output_name, target_comp, input_name)
+                input_name = f'inflow_{idx}'
+                data_connections.append((source_comp, output_name, component, input_name))
+
+        # Handle 'source' connections
+        if hasattr(component, 'source') and component.source is not None:
+            source_comp = component.source
+            # Demand expects 'available_supply', source provides 'outflow'
+            # (or fallback to 'release' or 'storage')
+            output_name = 'outflow'  # Primary output to check
+            input_name = 'available_supply'
+            data_connections.append((source_comp, output_name, component, input_name))
+
+    model.data_connections = data_connections
+    logger.info(f"Registered {len(data_connections)} formal data connections")
+
+
 def load_model(yaml_path: str, validate: bool = True):
     """Load and initialize a water model from a YAML configuration file.
 
@@ -735,6 +773,10 @@ def load_model(yaml_path: str, validate: bool = True):
         settings=model_settings,
         yaml_dir=yaml_dir
     )
+
+    # Step 7.5: Extract and register data connections from component attributes
+    # This populates model.data_connections for explicit tracking
+    _register_data_connections(model)
 
     # Step 8: Perform validation if requested
     if validate:
