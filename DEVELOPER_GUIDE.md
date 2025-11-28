@@ -546,7 +546,33 @@ from dataclasses import dataclass
 
 ## 4. Component Development
 
-### 4.1 Component Lifecycle
+### 4.1 Simulation Execution Flow
+
+The simulation engine executes each timestep in three phases:
+
+**Phase 1: Climate Data Update**
+- Climate data for the current timestep is retrieved from `ClimateManager`
+- The persistent `DriverRegistry` is updated with current values
+- Drivers (precipitation, temperature, ET) are registered/refreshed
+
+**Phase 2: Pre-Step Data Transfer** (`_transfer_data()`)
+- Component outputs from the previous timestep are transferred to inputs
+- This phase handles three connection types:
+  1. **Explicit 'inflows'**: Multiple sources aggregated (Junction, Reservoir)
+  2. **Single 'source'**: One-to-one connection (Demand → Reservoir)
+  3. **Registered data_connections**: Formal connection tracking from loader
+- All component `inputs` dictionaries are cleared and repopulated
+- Ensures components have access to data from their dependencies
+
+**Phase 3: Component Execution**
+- Components execute in topological order (respecting dependencies)
+- Each component's `step(date, drivers)` method is called
+- Components read from `self.inputs` and write to `self.outputs`
+- Results are collected and returned
+
+**Critical Insight:** The data transfer phase was added to fix a critical bug where components were reading stale data from previous timesteps. This phase ensures that all input data is fresh before any component executes.
+
+### 4.2 Component Lifecycle
 
 Every component follows this lifecycle:
 
@@ -573,7 +599,7 @@ def step(self, date: datetime, drivers) -> dict:
 **Key Points:**
 - `date`: Current simulation datetime for temporal calculations
 - `drivers`: DriverRegistry providing climate data access
-- `self.inputs`: Dictionary of values from connected components
+- `self.inputs`: Dictionary of values from connected components (populated in Phase 2)
 - `self.outputs`: Dictionary of values returned to downstream components
 
 ### 4.2 Creating a Component That Uses Kernels
