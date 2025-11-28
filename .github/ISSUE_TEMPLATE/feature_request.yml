@@ -1,0 +1,22 @@
+name: 🚀 New Feature
+description: Propose a new feature or component
+title: "[Feat]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What do you want to build?
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Implementation Plan
+      options:
+        - label: This requires a new Kernel (pure math)
+        - label: This requires a new Component (orchestration)
+        - label: This requires updating the Pydantic schema
+        - label: I will need to update COMPONENTS.md
+        - label: I will add a new example script

@@ -1,0 +1,5 @@
+# Jupyter notebook dependencies
+jupyter>=1.0
+notebook>=6.4
+ipywidgets>=8.0
+tqdm>=4.60

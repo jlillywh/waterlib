@@ -1,0 +1,22 @@
+[flake8]
+max-line-length = 100
+extend-ignore = E203, W503
+exclude =
+    .git,
+    __pycache__,
+    venv,
+    .venv,
+    build,
+    dist,
+    *.egg-info
+
+# flake8-import-restrictions configuration
+# Prevent kernels from importing components to maintain architectural purity
+# This ensures kernels remain pure functions, scalable to Rust/C++ implementations
+per-file-ignores =
+    waterlib/kernels/**/*.py: I9
+
+[flake8:local-plugins]
+extension =
+    I9 = waterlib_lint:check_kernel_imports
+paths = .

@@ -1,0 +1,9 @@
+# Development dependencies
+pytest>=7.0
+pytest-cov>=4.0
+hypothesis>=6.0
+
+# Code quality and linting
+flake8>=6.0
+flake8-import-order>=0.18
+pre-commit>=3.0

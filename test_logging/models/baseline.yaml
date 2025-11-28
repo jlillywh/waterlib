@@ -1,0 +1,88 @@
+name: "Baseline Water Supply Model"
+description: "Simple catchment-reservoir-demand system"
+
+settings:
+  start_date: "2020-01-01"
+  end_date: "2020-12-31"
+
+  climate:
+    precipitation:
+      mode: wgen
+    temperature:
+      mode: wgen
+    solar_radiation:
+      mode: wgen
+    et_method: hargreaves
+    latitude: 40.5
+    wgen_config:
+      param_file: ../data/wgen_params.csv
+      latitude: 40.5
+      elevation_m: 500
+      txmd: 18.5
+      txmw: 15.3
+      tn: 4.7
+      atx: 15.1
+      atn: 11.7
+      cvtx: 0.01675
+      acvtx: -0.00383
+      cvtn: 0.01605
+      acvtn: -0.00345
+      dt_day: 200
+      rs_mean: 12.9
+      rs_amplitude: 10.2
+      rs_cv: 0.3
+      rs_wet_factor: 0.7
+      min_rain_mm: 0.254
+      seed: 42
+
+components:
+  catchment:
+    type: Catchment
+    area_km2: 100.0
+    snow17_params:
+      scf: 1.0
+      mfmax: 1.5
+      mfmin: 0.5
+      uadj: 0.04
+      si: 1000.0
+      pxtemp: 1.0
+      nmf: 0.15
+      tipm: 0.1
+      mbase: 1.0
+      plwhc: 0.04
+      daygm: 0.05
+    awbm_params:
+      c_vec: [0.134, 0.433, 0.433]
+      a_vec: [0.279, 0.514, 0.207]
+      kbase: 0.95
+      ksurf: 0.35
+    meta:
+      x: 0.5
+      y: 0.8
+      color: '#90EE90'
+      label: 'Catchment'
+
+  reservoir:
+    type: Reservoir
+    initial_storage: 2000000
+    max_storage: 5000000
+    surface_area: 500000
+    inflows:
+      - catchment.runoff_m3d
+    meta:
+      x: 0.5
+      y: 0.5
+      color: '#4169E1'
+      label: 'Reservoir'
+
+  demand:
+    type: Demand
+    source: reservoir
+    mode: municipal
+    population: 50000
+    per_capita_demand_lpd: 200
+    meta:
+      x: 0.5
+      y: 0.2
+      color: '#FF6347'
+      label: 'City'

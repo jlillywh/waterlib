@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["waterlib*"]
+
+[project]
+name = "waterlib"
+version = "1.0.5"
+description = "A Python-native water resources simulation library for dynamic, 1-day time-step modeling"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Water Resources Consultant"}
+]
+keywords = ["water resources", "simulation", "hydrology", "reservoir modeling"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "pyyaml>=6.0",
+    "networkx>=2.8",
+    "pandas>=1.5",
+    "numpy>=1.23",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "hypothesis>=6.0",
+    "flake8>=6.0",
+    "flake8-import-order>=0.18",
+    "pre-commit>=3.0",
+]
+viz = [
+    "matplotlib>=3.5",
+]
+notebooks = [
+    "jupyter>=1.0",
+    "notebook>=6.4",
+    "ipywidgets>=8.0",
+    "tqdm>=4.60",
+]
+all = [
+    "matplotlib>=3.5",
+    "jupyter>=1.0",
+    "notebook>=6.4",
+    "ipywidgets>=8.0",
+    "tqdm>=4.60",
+]
+
+
+
+[project.urls]
+Homepage = "https://github.com/yourusername/waterlib"
+Documentation = "https://github.com/yourusername/waterlib#readme"
+Repository = "https://github.com/yourusername/waterlib"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=waterlib --cov-report=term-missing"

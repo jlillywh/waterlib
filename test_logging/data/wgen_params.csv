@@ -1,0 +1,45 @@
+# WGEN Monthly Parameter Template
+# This file contains monthly precipitation parameters for the WGEN weather generator
+#
+# NEW INTERFACE STRUCTURE:
+# - Monthly precipitation parameters: PWW, PWD, ALPHA, BETA (12 values each, one per month)
+# - Constant temperature/radiation parameters: Specified in YAML configuration
+# - Latitude: Specified in YAML configuration for Fourier-based seasonal calculations
+#
+# IMPORTANT UNIT CONVERSIONS:
+# - BETA values MUST be in millimeters (mm), NOT inches
+# - If converting from legacy US data: beta_mm = beta_inches × 25.4
+# - Temperature parameters in YAML should be in Celsius (°C)
+# - Solar radiation should be in MJ/m²/day
+#
+# PARAMETER DESCRIPTIONS:
+# - Month: Month number (1-12)
+# - PWW: Probability of wet day following a wet day [0-1]
+# - PWD: Probability of wet day following a dry day [0-1]
+# - ALPHA: Gamma distribution shape parameter (dimensionless, > 0)
+# - BETA: Gamma distribution scale parameter (mm, > 0)
+#
+# VALIDATION CHECKLIST:
+# ✓ BETA values are 3-25 mm for typical climates (not 0.2-1.0 which indicates unconverted inches)
+# ✓ Mean precipitation per wet day (ALPHA × BETA) is 3-20 mm for most climates
+# ✓ Probabilities (PWW, PWD) are between 0 and 1
+# ✓ File has exactly 12 rows (one per month)
+#
+# EXAMPLE VALUES BELOW:
+# These parameters represent a temperate climate station (latitude ~40°N)
+# Mean annual precipitation: ~800 mm
+# Values are already converted to SI units (mm)
+#
+Month,PWW,PWD,ALPHA,BETA
+1,0.493,0.248,0.860,3.865
+2,0.454,0.252,0.897,3.956
+3,0.461,0.248,0.945,4.828
+4,0.541,0.228,0.834,6.446
+5,0.535,0.180,0.830,6.170
+6,0.470,0.112,0.760,5.743
+7,0.363,0.105,0.691,5.648
+8,0.351,0.135,0.720,5.035
+9,0.432,0.130,0.677,7.387
+10,0.505,0.128,0.836,6.190
+11,0.474,0.191,0.817,5.116
+12,0.480,0.237,0.849,4.253
