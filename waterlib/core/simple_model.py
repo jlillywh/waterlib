@@ -217,8 +217,9 @@ class Model:
 
         This method:
         1. Gets climate data from ClimateManager (if available)
-        2. Executes each component's step() method in topological order
-        3. Collects and returns all component outputs
+        2. Wraps climate data in a DriverRegistry for component access
+        3. Executes each component's step() method in topological order
+        4. Collects and returns all component outputs
 
         Args:
             date: Current simulation date
@@ -226,10 +227,23 @@ class Model:
         Returns:
             Dictionary mapping component names to their output dictionaries
         """
-        # Prepare global_data with climate information
-        global_data = {}
+        # Create DriverRegistry with climate data
+        from waterlib.core.drivers import DriverRegistry, SimpleDriver
+
+        drivers = DriverRegistry()
+
         if self.climate_manager:
-            global_data.update(self.climate_manager.get_climate_data(date))
+            climate_data = self.climate_manager.get_climate_data(date)
+
+            # Register climate drivers with the data for this timestep
+            if 'precipitation' in climate_data:
+                drivers.register('precipitation', SimpleDriver(climate_data['precipitation']))
+            if 'tmin' in climate_data and 'tmax' in climate_data:
+                # Temperature driver provides avg temp for compatibility
+                tavg = (climate_data['tmin'] + climate_data['tmax']) / 2.0
+                drivers.register('temperature', SimpleDriver(tavg))
+            if 'pet' in climate_data:
+                drivers.register('et', SimpleDriver(climate_data['pet']))
 
         # Execute components in order
         if not self.execution_order:
@@ -238,7 +252,7 @@ class Model:
         results = {}
         for comp_name in self.execution_order:
             component = self.components[comp_name]
-            outputs = component.step(date, global_data)
+            outputs = component.step(date, drivers)
             results[comp_name] = outputs
 
         return results

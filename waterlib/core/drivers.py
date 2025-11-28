@@ -48,6 +48,32 @@ class Driver(ABC):
         pass
 
 
+class SimpleDriver(Driver):
+    """Driver that returns a constant value.
+
+    Used for wrapping ClimateManager output data into the Driver interface.
+    """
+
+    def __init__(self, value: float):
+        """Initialize with a constant value.
+
+        Args:
+            value: The constant value to return
+        """
+        self.value = value
+
+    def get_value(self, date: datetime) -> float:
+        """Return the constant value.
+
+        Args:
+            date: Current simulation date (unused)
+
+        Returns:
+            The constant value
+        """
+        return self.value
+
+
 class StochasticDriver(Driver):
     """Generates synthetic climate data using statistical parameters.
 
@@ -349,23 +375,26 @@ class DriverRegistry:
 
         logger.info(f"Registered driver: {name} ({type(driver).__name__})")
 
-    def get(self, name: str) -> Driver:
-        """Get a driver by name.
+    def get(self, name: str, default: Optional[Any] = None) -> Optional[Driver]:
+        """Get a driver by name with optional default.
 
         Args:
             name: Name of driver to retrieve
+            default: Default value if driver not found (optional)
 
         Returns:
-            Driver instance
+            Driver instance or default value if not found
 
         Raises:
-            KeyError: If driver name not found in registry
+            KeyError: If driver name not found and no default provided
         """
         if name not in self.drivers:
-            raise KeyError(
-                f"Driver '{name}' not found in registry. "
-                f"Available drivers: {list(self.drivers.keys())}"
-            )
+            if default is None:
+                raise KeyError(
+                    f"Driver '{name}' not found in registry. "
+                    f"Available drivers: {list(self.drivers.keys())}"
+                )
+            return default
         return self.drivers[name]
 
     def has_driver(self, name: str) -> bool:
