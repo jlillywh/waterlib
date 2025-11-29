@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2025-11-28
+### Fixed
+- **CRITICAL**: Scaffold template now includes proper data connections between reservoir and demand
+  - Previously generated models had 0% demand fulfillment due to missing connections
+  - Added bidirectional data_connections: reservoir→demand (outflow) and demand→reservoir (release)
+  - New projects created with `create_project()` now work correctly out of the box
+- Reservoir evaporation now properly accesses ET data from DriverRegistry
+- Fixed attribute check order: now checks for `.climate` before `.get()` to ensure modern driver access takes priority
+- Baseline scaffold model now demonstrates lake evaporation functionality
+
+### Changed
+- Reservoir component now supports both legacy `global_data.get('evaporation')` and modern `drivers.climate.et` access patterns
+- Updated version to 1.1.1
+
+### Technical Details
+- DriverRegistry has both `.get()` method (for legacy compatibility) and `.climate` attribute (for modern access)
+- Original code checked `hasattr(global_data, 'get')` first, which matched DriverRegistry but used wrong accessor
+- Fixed by checking `hasattr(global_data, 'climate')` first, ensuring ET values are properly retrieved
+- Scaffold template was missing the data_connections block that enables water transfer between components
+
+---
+
 ## [1.1.0] - 2025-11-28
 ### Added
 - **NEW COMPONENT**: `Pump` component for active water withdrawal with intelligent control

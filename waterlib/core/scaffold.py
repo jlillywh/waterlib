@@ -231,6 +231,10 @@ components:
     surface_area: 500000
     inflows:
       - catchment.runoff
+    data_connections:
+      - source: demand.demand
+        output: demand
+        input: release
     meta:
       x: 0.5
       y: 0.5
@@ -243,6 +247,10 @@ components:
     mode: municipal
     population: 50000
     per_capita_demand_lpd: 200
+    data_connections:
+      - source: reservoir.outflow
+        output: outflow
+        input: available_supply
     meta:
       x: 0.5
       y: 0.2

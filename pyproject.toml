@@ -7,7 +7,7 @@ include = ["waterlib*"]
 
 [project]
 name = "waterlib"
-version = "1.1.0"
+version = "1.1.1"
 description = "A Python-native water resources simulation library for dynamic, 1-day time-step modeling"
 readme = "README.md"
 requires-python = ">=3.8"

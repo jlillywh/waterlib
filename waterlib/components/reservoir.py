@@ -289,7 +289,18 @@ class Reservoir(Component):
         evaporation_loss = 0.0
         if self.current_area is not None:
             # Get evaporation rate from global_data (mm/day)
-            evap_rate_mm = float(global_data.get('evaporation', 0.0))
+            # Support both legacy dict access and modern drivers access
+            evap_rate_mm = 0.0
+            if hasattr(global_data, 'climate'):
+                # Modern drivers object - get ET from climate.et
+                try:
+                    from datetime import datetime
+                    evap_rate_mm = float(global_data.climate.et.get_value(date))
+                except (AttributeError, KeyError) as e:
+                    evap_rate_mm = 0.0
+            elif hasattr(global_data, 'get'):
+                # Legacy dict-style global_data
+                evap_rate_mm = float(global_data.get('evaporation', 0.0))
             # Convert to volume: mm/day * m² / 1000 = m³/day
             evaporation_loss = (evap_rate_mm * self.current_area) / 1000.0
             evaporation_loss = max(0.0, evaporation_loss)
