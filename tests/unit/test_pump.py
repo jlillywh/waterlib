@@ -168,18 +168,18 @@ class TestPumpOperation:
             deadband=2.0
         )
 
-        # Mock input: current elevation = 95.0, error = 5.0 > deadband
-        pump.inputs['reservoir.elevation'] = 95.0
+        # Mock input: current elevation = 105.0, error = 5.0 > deadband (withdrawal pump)
+        pump.inputs['reservoir.elevation'] = 105.0
 
         date = datetime(2020, 1, 1)
         outputs = pump.step(date, {})
 
         assert outputs['pumped_flow'] == 50000  # Full capacity
-        assert outputs['error'] == 5.0  # target - current
+        assert outputs['error'] == 5.0  # current - target for withdrawal
         assert outputs['target_value'] == 100.0
 
     def test_pump_deadband_off(self):
-        """Test deadband pump turns OFF when within deadband."""
+        """Test deadband pump operates conservatively when within deadband."""
         pump = Pump(
             name='test_pump',
             control_mode='deadband',
@@ -189,14 +189,16 @@ class TestPumpOperation:
             deadband=2.0
         )
 
-        # Mock input: current elevation = 99.0, error = 1.0 < deadband
-        pump.inputs['reservoir.elevation'] = 99.0
+        # Mock input: current elevation = 101.0, error = 1.0 < deadband
+        # Also provide demand input to test conservative operation
+        pump.inputs['reservoir.elevation'] = 101.0
+        pump.inputs['demand'] = 10000.0
 
         date = datetime(2020, 1, 1)
         outputs = pump.step(date, {})
 
-        assert outputs['pumped_flow'] == 0.0  # Off
-        assert outputs['error'] == 1.0
+        assert outputs['pumped_flow'] == 10000.0  # Meets demand conservatively
+        assert outputs['error'] == 1.0  # current - target
 
     def test_pump_proportional_control(self):
         """Test proportional pump flow calculation."""
@@ -209,15 +211,15 @@ class TestPumpOperation:
             kp=0.1
         )
 
-        # Mock input: current storage = 900000, error = 100000
-        pump.inputs['reservoir.storage'] = 900000
+        # Mock input: current storage = 1100000, error = 100000 (withdrawal pump)
+        pump.inputs['reservoir.storage'] = 1100000
 
         date = datetime(2020, 1, 1)
         outputs = pump.step(date, {})
 
         # Flow = kp * error = 0.1 * 100000 = 10000
         assert outputs['pumped_flow'] == 10000
-        assert outputs['error'] == 100000
+        assert outputs['error'] == 100000  # current - target
 
     def test_pump_proportional_clamped_to_capacity(self):
         """Test proportional pump clamps to max capacity."""
@@ -230,8 +232,8 @@ class TestPumpOperation:
             kp=0.1
         )
 
-        # Mock input: large error that would exceed capacity
-        pump.inputs['reservoir.storage'] = 0  # Error = 1000000
+        # Mock input: large positive error that would exceed capacity
+        pump.inputs['reservoir.storage'] = 2000000  # Error = 1000000
 
         date = datetime(2020, 1, 1)
         outputs = pump.step(date, {})

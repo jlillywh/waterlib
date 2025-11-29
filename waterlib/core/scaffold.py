@@ -33,6 +33,8 @@ import logging
 import platform
 from pathlib import Path
 from typing import Set
+import re
+import json
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -49,8 +51,18 @@ A waterlib water resources modeling project.
 - `data/` - Input data files (CSV, etc.)
 - `outputs/` - Simulation results and plots
 - `config/` - Additional configuration files
+- `analysis.ipynb` - Jupyter notebook for interactive analysis
+- `run_model.py` - Python script for batch simulation
 
 ## Getting Started
+
+### Option 1: Interactive (Jupyter Notebook)
+
+1. Open `analysis.ipynb` in Jupyter Lab or VS Code
+2. Run each cell to load, simulate, and visualize the model
+3. Modify parameters and re-run cells to explore scenarios
+
+### Option 2: Scripted (Python)
 
 1. Review and modify the sample model: `models/baseline.yaml`
 2. Run the sample script: `python run_model.py`
@@ -90,10 +102,69 @@ See the CSV file header for detailed parameter descriptions.
 2. Add additional components (pumps, diversions, etc.)
 3. Configure climate drivers (stochastic or timeseries)
 4. Run sensitivity analysis or scenario testing
+
+## Component Interfaces
+
+Below are the main outputs for each core component. Use these column names when analyzing simulation results.
+
+### Catchment
+
+| Output               | Description                                    |
+|----------------------|------------------------------------------------|
+| `catchment.runoff`         | Total runoff volume (m³/day)                  |
+| `catchment.snow_water_equivalent` | Snow water equivalent (mm)                    |
+| `catchment.runoff_depth_mm` | Runoff depth (mm/day)                         |
+
+### Reservoir
+
+| Output               | Description                                    |
+|----------------------|------------------------------------------------|
+| `reservoir.storage`        | Current storage volume (m³)                    |
+| `reservoir.inflow`         | Total inflow to reservoir (m³/day)            |
+| `reservoir.release`        | Controlled release (m³/day)                   |
+| `reservoir.spill`          | Spillway discharge (m³/day)                   |
+| `reservoir.evaporation`    | Evaporation loss (m³/day)                     |
+
+### Pump
+
+| Output               | Description                                    |
+|----------------------|------------------------------------------------|
+| `pump.pumped_flow`         | Controlled flow rate (m³/day)                 |
+| `pump.error`               | Control error (current - target)              |
+| `pump.target_value`        | Current target value                          |
+
+### Demand
+
+| Output               | Description                                    |
+|----------------------|------------------------------------------------|
+| `demand.demand`            | Total water demand (m³/day)                   |
+| `demand.supplied`          | Water actually supplied (m³/day)              |
+| `demand.deficit`           | Unmet demand (m³/day)                         |
+| `demand.fulfillment`       | Demand fulfillment ratio (0-1)                |
+
+### Junction
+
+| Output               | Description                                    |
+|----------------------|------------------------------------------------|
+| `junction.total_flow`      | Sum of all inflows (m³/day)                   |
+
+### RiverDiversion
+
+| Output               | Description                                    |
+|----------------------|------------------------------------------------|
+| `diversion.river_flow`     | Available river flow (m³/day)                 |
+| `diversion.total_diverted` | Total water diverted (m³/day)                 |
+| `diversion.downstream_flow` | Remaining downstream flow (m³/day)           |
+| `diversion.[outflow_name]` | Individual outflow amounts (m³/day)           |
 """
 
 SAMPLE_MODEL_TEMPLATE = """name: "Baseline Water Supply Model"
 description: "Simple catchment-reservoir-demand system"
+
+site:
+  latitude: 40.5
+  elevation_m: 500
+  time_zone: -7.0
 
 settings:
   start_date: "2020-01-01"
@@ -107,11 +178,8 @@ settings:
     solar_radiation:
       mode: wgen
     et_method: hargreaves
-    latitude: 40.5
     wgen_config:
       param_file: ../data/wgen_params.csv
-      latitude: 40.5
-      elevation_m: 500
       txmd: 18.5
       txmw: 15.3
       tn: 4.7
@@ -162,7 +230,7 @@ components:
     max_storage: 5000000
     surface_area: 500000
     inflows:
-      - catchment.runoff_m3d
+      - catchment.runoff
     meta:
       x: 0.5
       y: 0.5
@@ -283,6 +351,287 @@ def main():
 if __name__ == "__main__":
     main()
 '''
+
+# Jupyter notebook template
+NOTEBOOK_TEMPLATE = {
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "# {project_name} - Water Resources Model\n",
+                "\n",
+                "This notebook demonstrates the waterlib simulation workflow:\n",
+                "1. Load and validate the model configuration\n",
+                "2. Run the simulation\n",
+                "3. Visualize results\n",
+                "\n",
+                "**Model:** `models/baseline.yaml`"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "import logging\n",
+                "import sys\n",
+                "import waterlib\n",
+                "\n",
+                "# Setup logging to see internal engine details\n",
+                "for handler in logging.root.handlers[:]:\n",
+                "    logging.root.removeHandler(handler)\n",
+                "\n",
+                "logging.basicConfig(\n",
+                "    level=logging.INFO,  # Use DEBUG for more detailed output\n",
+                "    stream=sys.stdout,\n",
+                "    format='%(levelname)s: %(message)s'\n",
+                ")\n",
+                "\n",
+                "print(f\"Waterlib version: {waterlib.__version__}\")"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## Load Model\n",
+                "\n",
+                "Load the baseline model from YAML configuration. This validates the model structure and initializes all components."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "# Load the baseline model\n",
+                "try:\n",
+                "    model = waterlib.load_model('models/baseline.yaml')\n",
+                "    print(f\"\\nSUCCESS: Loaded model '{model.name}'\")\n",
+                "    print(f\"Components: {list(model.components.keys())}\")\n",
+                "    print(f\"Simulation period: {model.settings.start_date} to {model.settings.end_date}\")\n",
+                "except Exception as e:\n",
+                "    print(f\"\\nERROR: {e}\")\n",
+                "    raise"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## Run Simulation\n",
+                "\n",
+                "Execute the daily timestep simulation. This runs the water balance for all components over the simulation period."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "# Run simulation\n",
+                "print(\"\\n--- Starting Simulation ---\")\n",
+                "results = waterlib.run_simulation(model, output_dir='outputs')\n",
+                "\n",
+                "# Print summary statistics\n",
+                "df = results.dataframe\n",
+                "print(f\"\\n=== Simulation Results ===\")\n",
+                "print(f\"Simulated {len(df)} days\")\n",
+                "\n",
+                "# Reservoir statistics\n",
+                "if 'reservoir.storage' in df.columns:\n",
+                "    storage = df['reservoir.storage']\n",
+                "    print(f\"\\nReservoir Storage:\")\n",
+                "    print(f\"  Mean: {storage.mean():,.0f} m³\")\n",
+                "    print(f\"  Min:  {storage.min():,.0f} m³\")\n",
+                "    print(f\"  Max:  {storage.max():,.0f} m³\")\n",
+                "\n",
+                "# Catchment statistics\n",
+                "if 'catchment.runoff' in df.columns:\n",
+                "    runoff = df['catchment.runoff']\n",
+                "    print(f\"\\nCatchment Runoff:\")\n",
+                "    print(f\"  Total: {runoff.sum():,.0f} m³\")\n",
+                "    print(f\"  Mean daily: {runoff.mean():,.0f} m³/day\")"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## Visualize Results\n",
+                "\n",
+                "Create a combined time history plot with dual y-axes showing reservoir storage and system flows."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "import matplotlib.pyplot as plt\n",
+                "import matplotlib.dates as mdates\n",
+                "\n",
+                "# Create figure with single plot and dual y-axes\n",
+                "fig, ax1 = plt.subplots(figsize=(14, 7))\n",
+                "fig.suptitle(f\"{model.name} - Reservoir Storage and System Flows\", fontsize=14, fontweight='bold')\n",
+                "\n",
+                "dates = df.index\n",
+                "\n",
+                "# Left Y-axis: Reservoir Storage (million m³)\n",
+                "color1 = 'royalblue'\n",
+                "if 'reservoir.storage' in df.columns:\n",
+                "    storage_mcm = df['reservoir.storage'] / 1e6  # Convert to million m³\n",
+                "    ax1.plot(dates, storage_mcm, color=color1, linewidth=2, label='Reservoir Storage', zorder=3)\n",
+                "    ax1.set_ylabel('Storage (million m³)', fontsize=12, color=color1, fontweight='bold')\n",
+                "    ax1.tick_params(axis='y', labelcolor=color1)\n",
+                "    ax1.set_xlim(dates[0], dates[-1])\n",
+                "\n",
+                "# Right Y-axis: Flows (m³/day)\n",
+                "ax2 = ax1.twinx()\n",
+                "flow_lines = []\n",
+                "\n",
+                "if 'catchment.runoff' in df.columns:\n",
+                "    line, = ax2.plot(dates, df['catchment.runoff'], label='Catchment Runoff', \n",
+                "                    color='forestgreen', linewidth=1.2, alpha=0.8, zorder=2)\n",
+                "    flow_lines.append(line)\n",
+                "\n",
+                "if 'reservoir.outflow' in df.columns:\n",
+                "    line, = ax2.plot(dates, df['reservoir.outflow'], label='Reservoir Release', \n",
+                "                    color='darkblue', linewidth=1.2, alpha=0.8, zorder=2)\n",
+                "    flow_lines.append(line)\n",
+                "\n",
+                "if 'reservoir.spill' in df.columns:\n",
+                "    spill = df['reservoir.spill']\n",
+                "    if spill.sum() > 0:  # Only plot if there are spills\n",
+                "        line, = ax2.plot(dates, spill, label='Spillway Discharge', \n",
+                "                        color='orangered', linewidth=1.2, linestyle='--', alpha=0.8, zorder=2)\n",
+                "        flow_lines.append(line)\n",
+                "\n",
+                "if 'demand.demand' in df.columns:\n",
+                "    line, = ax2.plot(dates, df['demand.demand'], label='Water Demand', \n",
+                "                    color='darkorange', linewidth=1, linestyle=':', alpha=0.7, zorder=1)\n",
+                "    flow_lines.append(line)\n",
+                "\n",
+                "ax2.set_ylabel('Flow (m³/day)', fontsize=12, color='darkgreen', fontweight='bold')\n",
+                "ax2.tick_params(axis='y', labelcolor='darkgreen')\n",
+                "\n",
+                "# Format x-axis\n",
+                "ax1.xaxis.set_major_formatter(mdates.DateFormatter('%b'))\n",
+                "ax1.xaxis.set_major_locator(mdates.MonthLocator())\n",
+                "ax1.set_xlabel('Date', fontsize=12, fontweight='bold')\n",
+                "\n",
+                "# Grid\n",
+                "ax1.grid(True, alpha=0.3, zorder=0)\n",
+                "\n",
+                "# Combined legend\n",
+                "# Get storage line for legend\n",
+                "storage_line = ax1.get_lines()[0] if ax1.get_lines() else None\n",
+                "if storage_line:\n",
+                "    all_lines = [storage_line] + flow_lines\n",
+                "    all_labels = [line.get_label() for line in all_lines]\n",
+                "    ax1.legend(all_lines, all_labels, loc='upper left', fontsize=10, framealpha=0.9)\n",
+                "\n",
+                "# Add summary statistics box\n",
+                "if 'reservoir.storage' in df.columns:\n",
+                "    storage_stats = (\n",
+                "        f\"Storage Stats:\\n\"\n",
+                "        f\"Mean: {df['reservoir.storage'].mean()/1e6:.2f} ML\\n\"\n",
+                "        f\"Min: {df['reservoir.storage'].min()/1e6:.2f} ML\\n\"\n",
+                "        f\"Max: {df['reservoir.storage'].max()/1e6:.2f} ML\"\n",
+                "    )\n",
+                "    ax1.text(0.98, 0.03, storage_stats, transform=ax1.transAxes, \n",
+                "            fontsize=9, verticalalignment='bottom', horizontalalignment='right',\n",
+                "            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))\n",
+                "\n",
+                "plt.tight_layout()\n",
+                "plt.savefig('outputs/results_combined.png', dpi=150, bbox_inches='tight')\n",
+                "print(\"\\nCombined plot saved to: outputs/results_combined.png\")\n",
+                "plt.show()"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## Network Diagram\n",
+                "\n",
+                "Visualize the model structure showing component connections."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "# Generate network diagram\n",
+                "try:\n",
+                "    model.visualize(output_path='outputs/network_diagram.png', show=False)\n",
+                "    print(\"Network diagram saved to: outputs/network_diagram.png\")\n",
+                "    \n",
+                "    # Display the diagram inline\n",
+                "    from IPython.display import Image, display\n",
+                "    display(Image('outputs/network_diagram.png'))\n",
+                "except Exception as e:\n",
+                "    print(f\"Could not generate network diagram: {e}\")\n",
+                "    print(\"Make sure matplotlib is installed: pip install waterlib[viz]\")"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "## Data Export\n",
+                "\n",
+                "The simulation results are automatically saved to CSV. You can also access the raw dataframe for custom analysis."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "# Display available output columns\n",
+                "print(\"Available output columns:\")\n",
+                "for col in df.columns:\n",
+                "    print(f\"  - {col}\")\n",
+                "\n",
+                "print(f\"\\nResults saved to: {results.csv_path}\")\n",
+                "\n",
+                "# Show first few rows\n",
+                "print(\"\\nFirst 5 days of results:\")\n",
+                "df.head()"
+            ]
+        }
+    ],
+    "metadata": {
+        "kernelspec": {
+            "display_name": "Python 3",
+            "language": "python",
+            "name": "python3"
+        },
+        "language_info": {
+            "codemirror_mode": {
+                "name": "ipython",
+                "version": 3
+            },
+            "file_extension": ".py",
+            "mimetype": "text/x-python",
+            "name": "python",
+            "nbconvert_exporter": "python",
+            "pygments_lexer": "ipython3",
+            "version": "3.9.0"
+        }
+    },
+    "nbformat": 4,
+    "nbformat_minor": 5
+}
 
 
 def _get_invalid_chars() -> Set[str]:
@@ -518,8 +867,37 @@ def _generate_readme(project_root: Path, project_name: str) -> None:
     readme_path = project_root / "README.md"
     readme_content = README_TEMPLATE.format(project_name=project_name)
 
+    # Try to read COMPONENTS.md from repo root
+    import os
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    components_md = os.path.join(repo_root, "COMPONENTS.md")
+    if os.path.exists(components_md):
+        with open(components_md, encoding="utf-8") as f:
+            md_text = f.read()
+        interfaces = _extract_component_outputs(md_text)
+        readme_content += "\n\n" + interfaces
+
     readme_path.write_text(readme_content, encoding='utf-8')
-    logger.debug(f"Generated README.md at {readme_path}")
+    logger.debug(f"Generated README.md at {readme_path} (with component interfaces)")
+
+
+def _extract_component_outputs(md_text: str) -> str:
+ """
+ Extract the Outputs tables for each core component from COMPONENTS.md.
+ Returns a markdown string with all outputs tables and component names.
+ """
+ components = [
+ "Catchment", "Reservoir", "Pump", "Demand", "RiverDiversion", "Junction", "Weir"
+ ]
+ result = ["## Component Interfaces\n\nBelow are the main outputs for each core component. Use these column names when analyzing simulation results.\n"]
+ for comp in components:
+     # Find the section for the component
+     pattern = rf"## {comp}.*?### Outputs\n(\|[\s\S]+?\|[\s\S]+?\|)(?:\n|---|###|##|$)"
+     match = re.search(pattern, md_text, re.MULTILINE)
+     if match:
+         table = match.group(1).strip()
+         result.append(f"### {comp}\n\n{table}\n")
+ return "\n".join(result)
 
 
 def _generate_sample_model(project_root: Path) -> None:
@@ -595,6 +973,56 @@ def _generate_sample_script(project_root: Path, project_name: str) -> None:
 
     script_path.write_text(SAMPLE_SCRIPT_TEMPLATE, encoding='utf-8')
     logger.debug(f"Generated sample script at {script_path}")
+
+
+def _generate_notebook(project_root: Path, project_name: str) -> None:
+    """
+    Generate a Jupyter notebook with example simulation workflow.
+
+    Creates an analysis.ipynb file in the project root with cells demonstrating:
+    - Model loading and validation
+    - Running simulations
+    - Visualizing results with time series plots
+    - Generating network diagrams
+    - Data export
+
+    Parameters
+    ----------
+    project_root : Path
+        Path to the project root directory where analysis.ipynb will be created
+    project_name : str
+        Name of the project (used in notebook title)
+
+    Raises
+    ------
+    OSError
+        If notebook creation fails due to permissions or other filesystem issues
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as tmpdir:
+    ...     project_path = Path(tmpdir) / "test_project"
+    ...     project_path.mkdir()
+    ...     _generate_notebook(project_path, "test_project")
+    ...     notebook_path = project_path / "analysis.ipynb"
+    ...     notebook_path.exists()
+    True
+    """
+    notebook_path = project_root / "analysis.ipynb"
+
+    # Create a copy of the template and customize it
+    notebook = NOTEBOOK_TEMPLATE.copy()
+
+    # Update the project name in the first markdown cell
+    notebook['cells'][0]['source'][0] = notebook['cells'][0]['source'][0].format(
+        project_name=project_name
+    )
+
+    # Write the notebook as JSON
+    notebook_path.write_text(json.dumps(notebook, indent=1), encoding='utf-8')
+    logger.debug(f"Generated Jupyter notebook at {notebook_path}")
 
 
 # WGEN Parameters CSV Template
@@ -1047,6 +1475,7 @@ def create_project(
             _generate_readme(project_root, name)
             _generate_sample_model(project_root)
             _generate_sample_script(project_root, name)
+            _generate_notebook(project_root, name)
 
             # Generate data files
             _generate_wgen_params(project_root)

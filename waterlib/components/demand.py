@@ -268,4 +268,4 @@ class Demand(Component):
         self.outputs['supplied'] = supplied
         self.outputs['deficit'] = deficit
 
-        return self.outputs
+        return self.outputs.copy()

@@ -229,4 +229,4 @@ class RiverDiversion(Component):
         self.outputs['remaining_flow'] = remaining_flow
         self.outputs['instream_flow'] = instream_allocated
 
-        return self.outputs
+        return self.outputs.copy()

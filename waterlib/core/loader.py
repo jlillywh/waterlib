@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple
 import networkx as nx
 
-from waterlib.core.base import Component
+from waterlib.core.base import Component, SiteConfig
 from waterlib.core.exceptions import (
     YAMLSyntaxError,
     ConfigurationError,
@@ -92,7 +92,8 @@ def load_yaml(yaml_path: str) -> Dict[str, Any]:
 
 def create_component(name: str, component_config: Dict[str, Any],
                      component_registry: Dict[str, type],
-                     yaml_dir: Path = None) -> Component:
+                     yaml_dir: Path = None,
+                     site = None) -> Component:
     """Factory function to instantiate components from YAML parameters.
 
     This function creates a component instance based on the 'type' specified
@@ -104,6 +105,7 @@ def create_component(name: str, component_config: Dict[str, Any],
         component_config: Dictionary of component parameters from YAML
         component_registry: Dictionary mapping type strings to component classes
         yaml_dir: Directory containing the YAML file (for resolving relative paths)
+        site: Optional SiteConfig object with latitude and elevation
 
     Returns:
         Instantiated component object
@@ -141,6 +143,10 @@ def create_component(name: str, component_config: Dict[str, Any],
     if yaml_dir is not None:
         params['_yaml_dir'] = yaml_dir
 
+    # Add site to params if provided (for components that need site data like Catchment)
+    if site is not None:
+        params['_site'] = site
+
     # Instantiate component
     try:
         component = component_class(name=name, meta=meta, **params)
@@ -169,7 +175,8 @@ def create_component(name: str, component_config: Dict[str, Any],
 
 def instantiate_components(config: Dict[str, Any],
                           component_registry: Dict[str, type],
-                          yaml_dir: Path = None) -> Dict[str, Component]:
+                          yaml_dir: Path = None,
+                          site = None) -> Dict[str, Component]:
     """Instantiate all components from YAML configuration.
 
     This function creates instances of all components defined in the YAML
@@ -179,6 +186,7 @@ def instantiate_components(config: Dict[str, Any],
         config: Parsed YAML configuration dictionary
         component_registry: Dictionary mapping type strings to component classes
         yaml_dir: Directory containing the YAML file (for resolving relative paths)
+        site: Optional SiteConfig object with latitude and elevation
 
     Returns:
         Dictionary mapping component names to component instances
@@ -189,8 +197,9 @@ def instantiate_components(config: Dict[str, Any],
     components = {}
 
     for name, component_config in config['components'].items():
-        # Pass yaml_dir to component factory for path resolution
-        components[name] = create_component(name, component_config, component_registry, yaml_dir=yaml_dir)
+        # Pass yaml_dir and site to component factory
+        components[name] = create_component(name, component_config, component_registry,
+                                           yaml_dir=yaml_dir, site=site)
 
     return components
 
@@ -646,15 +655,58 @@ def validate_settings(settings: Dict[str, Any]) -> ModelSettings:
         raise ConfigurationError(f"Error parsing settings: {str(e)}")
 
 
-def _register_data_connections(model):
-    """Extract and register formal data connections from component attributes.
+def parse_site_config(config: Dict[str, Any]) -> SiteConfig:
+    """Parse site configuration from YAML.
 
-    This function analyzes component attributes (inflow_getters, source) and
-    populates model.data_connections with explicit (source, output, target, input)
-    tuples. This provides a formal record of all data dependencies.
+    Strictly requires the 'site' block. Legacy formats are no longer supported.
+
+    Args:
+        config: Full YAML configuration dictionary
+
+    Returns:
+        SiteConfig instance with validated site properties
+
+    Raises:
+        ConfigurationError: If site config is invalid or missing
+    """
+    # Check for modern site: block
+    if 'site' in config:
+        site_dict = config['site']
+
+        if not isinstance(site_dict, dict):
+            raise ConfigurationError("'site' block must be a dictionary")
+
+        if 'latitude' not in site_dict:
+            raise ConfigurationError("'site' block must contain 'latitude'")
+
+        try:
+            return SiteConfig(
+                latitude=float(site_dict['latitude']),
+                elevation_m=float(site_dict.get('elevation_m', 0.0)),
+                time_zone=float(site_dict['time_zone']) if 'time_zone' in site_dict else None
+            )
+        except ValueError as e:
+            raise ConfigurationError(f"Invalid site configuration: {str(e)}")
+
+    # If we reach here, the 'site' block is missing.
+    # HARD BREAK: We do not check wgen_config anymore.
+    raise ConfigurationError(
+        "Missing required 'site' block in YAML. "
+        "Please add a top-level 'site:' section with 'latitude' and 'elevation_m'."
+    )
+
+
+def _register_data_connections(model, config: Dict[str, Any]):
+    """Extract and register formal data connections from component attributes and YAML.
+
+    This function analyzes component attributes (inflow_getters, source) and YAML
+    data_connections fields, then populates model.data_connections with explicit
+    (source, output, target, input) tuples. This provides a formal record of all
+    data dependencies.
 
     Args:
         model: Model instance with instantiated components
+        config: Full YAML configuration dictionary
 
     Note:
         Currently, most connections are handled implicitly via _transfer_data()
@@ -679,6 +731,23 @@ def _register_data_connections(model):
             output_name = 'outflow'  # Primary output to check
             input_name = 'available_supply'
             data_connections.append((source_comp, output_name, component, input_name))
+
+        # Handle YAML 'data_connections' field
+        if comp_name in config.get('components', {}):
+            comp_config = config['components'][comp_name]
+            yaml_data_conns = comp_config.get('data_connections', [])
+
+            for conn in yaml_data_conns:
+                # Parse connection: {source: "comp.output", output: "output_name", input: "input_name"}
+                source_str = conn.get('source', '')
+                output_name = conn.get('output', '')
+                input_name = conn.get('input', '')
+
+                if source_str and output_name and input_name:
+                    # Parse source component from dot notation
+                    source_comp, _ = parse_dot_notation(source_str, model.components)
+                    # Register connection
+                    data_connections.append((source_comp, output_name, component, input_name))
 
     model.data_connections = data_connections
     logger.info(f"Registered {len(data_connections)} formal data connections")
@@ -745,9 +814,18 @@ def load_model(yaml_path: str, validate: bool = True):
         logger.error(f"Settings validation failed: {str(e)}")
         raise
 
-    # Step 4: Instantiate all components
+    # Step 3.5: Parse site configuration (latitude, elevation) with legacy support
     try:
-        components = instantiate_components(config, component_registry, yaml_dir)
+        site_config = parse_site_config(config)
+        if site_config:
+            logger.info(f"Site config: latitude={site_config.latitude}, elevation={site_config.elevation_m}m")
+    except ConfigurationError as e:
+        logger.error(f"Site configuration parsing failed: {str(e)}")
+        raise
+
+    # Step 4: Instantiate all components (pass site_config for components that need it)
+    try:
+        components = instantiate_components(config, component_registry, yaml_dir, site=site_config)
         logger.info(f"Instantiated {len(components)} components")
     except ConfigurationError as e:
         logger.error(f"Component instantiation failed: {str(e)}")
@@ -771,12 +849,13 @@ def load_model(yaml_path: str, validate: bool = True):
         components=components,
         connections=connections,
         settings=model_settings,
+        site=site_config,
         yaml_dir=yaml_dir
     )
 
-    # Step 7.5: Extract and register data connections from component attributes
+    # Step 7.5: Extract and register data connections from component attributes and YAML
     # This populates model.data_connections for explicit tracking
-    _register_data_connections(model)
+    _register_data_connections(model, config)
 
     # Step 8: Perform validation if requested
     if validate:

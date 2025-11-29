@@ -31,7 +31,7 @@ Snow17 processes precipitation into rain and snowmelt, which then feeds into AWB
 | Parameter | Type | Required | Units | Description |
 |-----------|------|----------|-------|-------------|
 | `area_km2` | float | Yes | km² | Catchment drainage area |
-| `snow17_params` | dict | Yes | - | Snow17 model parameters (see below) |
+| `snow17_params` | dict | Yes | - | Snow17 model parameters (see Snow17 section). Requires top-level `site:` block with latitude and elevation_m |
 | `awbm_params` | dict | Yes | - | AWBM model parameters (see below) |
 
 #### Snow17 Parameters
@@ -80,11 +80,15 @@ Climate data from drivers:
 ### Example
 
 ```yaml
+site:
+  latitude: 45.0
+  elevation_m: 1500
+
 components:
   mountain_catchment:
     type: Catchment
     area_km2: 150.0
-    snow17_params:
+    snow17_params:  # Latitude/elevation from site block
       scf: 1.0
       mfmax: 1.5
       mfmin: 0.5
@@ -210,15 +214,18 @@ components:
 
 ## Pump
 
-Feedback-controlled flow component with deadband or proportional control.
+Feedback-controlled water withdrawal component with deadband or proportional control.
 
 ### Description
 
-The Pump component monitors a process variable (typically reservoir depth/elevation) and adjusts flow to maintain a target value. The target can vary seasonally via a lookup table with linear interpolation.
+The Pump component actively withdraws water from a source (typically a reservoir) based on monitoring a process variable. It uses withdrawal pump semantics where positive error indicates excess (above target) and triggers increased pumping. The target can vary seasonally via a lookup table with linear interpolation.
 
 Control Modes:
-- **Deadband (ON/OFF)**: Pump operates at full capacity when error exceeds deadband
-- **Proportional**: Flow is proportional to error (Flow = Kp × error)
+- **Deadband (ON/OFF)**: Three-tier operation based on error magnitude:
+  * error < -deadband: Conservation mode (pump only to meet demand)
+  * -deadband ≤ error ≤ deadband: Normal operation (pump to meet demand)
+  * error > deadband: Aggressive drawdown (pump at full capacity)
+- **Proportional**: Flow is proportional to error magnitude with capacity limits
 
 ### Parameters
 
@@ -235,34 +242,65 @@ Control Modes:
 
 ### Inputs
 
+Inputs are provided via `data_connections` in YAML configuration:
+
 | Input | Units | Description |
 |-------|-------|-------------|
-| `process_variable` | varies | Monitored value (e.g., reservoir.storage or reservoir.elevation) |
+| `process_variable` | varies | Monitored value (e.g., reservoir.storage or reservoir.elevation). Specified via component parameter. |
+| `demand` | m³/day | Optional demand request from downstream component. Pump will limit operation to demand when provided. |
 
 ### Outputs
 
 | Output | Units | Description |
 |--------|-------|-------------|
 | `pumped_flow` | m³/day | Controlled flow |
-| `error` | varies | Control error (target - current) for diagnostics |
+| `error` | varies | Control error (current - target). Positive when above target (withdrawal semantics). |
 | `target_value` | varies | Current target value for diagnostics |
 
-### Example (Deadband Mode with Constant Target)
+### Example (Deadband Mode with Data Connections)
 
 ```yaml
 components:
-  pump_1:
+  reservoir:
+    type: Reservoir
+    initial_storage: 2000000
+    max_storage: 5000000
+    inflows:
+      - catchment.runoff
+      - pump.pumped_flow  # Return flow
+    data_connections:
+      - source: pump.pumped_flow
+        output: pumped_flow
+        input: release
+
+  demand:
+    type: Demand
+    mode: municipal
+    population: 50000
+    per_capita_demand_lpd: 200
+    source: pump
+
+  pump:
     type: Pump
-    control_mode: 'deadband'
+    control_mode: deadband
     capacity: 50000
-    process_variable: 'main_reservoir.elevation'
-    target: 100.0
-    deadband: 2.0
+    process_variable: reservoir.storage
+    target: 3000000  # Maintain 3M m³ target storage
+    deadband: 500000  # ±500k m³ deadband
+    inflows:
+      - demand.demand
+    data_connections:
+      - source: reservoir.storage
+        output: storage
+        input: reservoir.storage
+      - source: demand.demand
+        output: demand
+        input: demand
     meta:
       x: 0.6
-      y: 0.3
+      y: 0.4
       color: '#FF8C00'
-      label: 'Pump Station'
+      label: 'Supply Pump'
 ```
 
 ### Example (Proportional Mode with Seasonal Target)
@@ -288,11 +326,17 @@ components:
 
 ### Notes
 
-- Deadband mode: Pump turns ON at full capacity when error > deadband, OFF otherwise
-- Proportional mode: Flow = kp × (target - current), clamped to [0, capacity]
+- **Withdrawal semantics**: error = current - target (positive = above target = pump more)
+- **Deadband mode**: Three operational tiers based on storage level relative to target
+  * Conservation mode (storage low): Pump only to meet demand
+  * Normal operation (storage in deadband): Pump to meet demand
+  * Drawdown mode (storage high): Pump at full capacity to reduce storage
+- **Proportional mode**: Flow = kp × abs(error), clamped to [0, capacity]
+- **Demand integration**: When demand input provided, pump respects demand limits in conservation/normal modes
+- **Data connections required**: Use YAML `data_connections` to wire process_variable and demand inputs
+- **Execution order**: Pump must execute after source components (reservoir, demand) to see current values
 - Seasonal targets use linear interpolation between day-of-year points
 - Process variable can be any component output (storage, elevation, flow, etc.)
-- Use LaggedValue component for feedback control to avoid circular dependencies
 
 ---
 

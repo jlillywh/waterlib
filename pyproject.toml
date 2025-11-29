@@ -7,7 +7,7 @@ include = ["waterlib*"]
 
 [project]
 name = "waterlib"
-version = "1.0.5"
+version = "1.1.0"
 description = "A Python-native water resources simulation library for dynamic, 1-day time-step modeling"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -73,4 +73,4 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=waterlib --cov-report=term-missing"
+addopts = "-v"

@@ -1,6 +1,10 @@
 name: "Baseline Water Supply Model"
 description: "Simple catchment-reservoir-demand system"
 
+site:
+  latitude: 40.5
+  elevation_m: 500
+
 settings:
   start_date: "2020-01-01"
   end_date: "2020-12-31"
@@ -68,19 +72,49 @@ components:
     max_storage: 5000000
     surface_area: 500000
     inflows:
-      - catchment.runoff_m3d
+      - catchment.runoff
+      - pump.pumped_flow
+    data_connections:
+      - source: pump.pumped_flow
+        output: pumped_flow
+        input: release
     meta:
       x: 0.5
       y: 0.5
       color: '#4169E1'
       label: 'Reservoir'
 
+  pump:
+    type: Pump
+    control_mode: deadband
+    capacity: 50000
+    process_variable: reservoir.storage
+    target: 3000000
+    deadband: 500000
+    inflows:
+      - demand.demand
+    data_connections:
+      - source: demand.demand
+        output: demand
+        input: demand
+      - source: reservoir.storage
+        output: storage
+        input: reservoir.storage
+    meta:
+      x: 0.5
+      y: 0.35
+      color: '#FFA500'
+      label: 'Pump'
+
   demand:
     type: Demand
-    source: reservoir
     mode: municipal
     population: 50000
     per_capita_demand_lpd: 200
+    data_connections:
+      - source: pump.pumped_flow
+        output: pumped_flow
+        input: available_supply
     meta:
       x: 0.5
       y: 0.2

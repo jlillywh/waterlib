@@ -146,6 +146,12 @@ class TestEndToEndWorkflow:
                 if "matplotlib" not in str(e):
                     raise
                 pytest.skip("matplotlib not available for visualization test")
+            except Exception as e:
+                # Skip test if tkinter/display issues (common in CI/batch environments)
+                error_msg = str(e).lower()
+                if any(x in error_msg for x in ['tcl', 'tk', 'display', '_tkinter']):
+                    pytest.skip(f"Visualization test skipped due to display/tkinter issue: {e}")
+                raise
 
     def test_execution_order_is_computed(self):
         """Test that execution order is computed correctly."""

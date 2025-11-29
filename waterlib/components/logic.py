@@ -195,4 +195,4 @@ class LaggedValue(Component):
         # Store current value for next timestep
         self._previous_value = self._current_value
 
-        return self.outputs
+        return self.outputs.copy()

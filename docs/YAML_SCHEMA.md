@@ -6,11 +6,12 @@ Complete reference for waterlib model.yaml configuration files.
 
 1. [Overview](#overview)
 2. [File Structure](#file-structure)
-3. [Settings Block](#settings-block)
-4. [Components Block](#components-block)
-5. [Connections Block](#connections-block)
-6. [Complete Examples](#complete-examples)
-7. [Validation Rules](#validation-rules)
+3. [Site Block](#site-block)
+4. [Settings Block](#settings-block)
+5. [Components Block](#components-block)
+6. [Connections Block](#connections-block)
+7. [Complete Examples](#complete-examples)
+8. [Validation Rules](#validation-rules)
 
 ---
 
@@ -26,6 +27,10 @@ A waterlib model is defined in a single YAML file that contains:
 ### Minimal Example
 
 ```yaml
+site:
+  latitude: 40.5
+  elevation_m: 500
+
 settings:
   start_date: "2020-01-01"
   end_date: "2020-12-31"
@@ -41,7 +46,6 @@ settings:
         mean_tmin: 5
         mean_tmax: 20
     et_method: hargreaves
-    latitude: 40.5
 
 components:
   catchment:
@@ -66,6 +70,12 @@ components:
 # Optional metadata
 name: "Model Name"
 description: "Model description"
+
+# Required site configuration (for models using WGEN or Snow17)
+site:
+  latitude: 40.5        # decimal degrees
+  elevation_m: 500      # meters above sea level
+  time_zone: -7         # optional: UTC offset
 
 # Required settings
 settings:
@@ -102,6 +112,81 @@ components:
     type: Catchment
     area_km2: 100.0  # Catchment area in square kilometers
 ```
+
+---
+
+## Site Block
+
+The `site` block defines physical site properties used by components and climate models. This block is **required** when using WGEN weather generation or Snow17 snow modeling.
+
+### Structure
+
+```yaml
+site:
+  latitude: float        # Required: decimal degrees (-90 to 90)
+  elevation_m: float     # Required: meters above sea level
+  time_zone: int         # Optional: UTC offset (-12 to 14)
+```
+
+### Parameters
+
+| Parameter | Type | Required | Units | Valid Range | Description |
+|-----------|------|----------|-------|-------------|-------------|
+| `latitude` | float | Yes | degrees | -90 to 90 | Site latitude (positive = N, negative = S) |
+| `elevation_m` | float | Yes | meters | any | Elevation above mean sea level |
+| `time_zone` | int | No | hours | -12 to 14 | UTC offset for local time |
+
+### When is Site Required?
+
+The `site` block is **required** when your model uses:
+- **WGEN** stochastic weather generation (uses latitude for Fourier seasonal calculations)
+- **Snow17** snow modeling (uses latitude and elevation for snowmelt processes)
+
+If you're only using timeseries climate data and components without Snow17, the site block may be omitted.
+
+### Usage by Components
+
+**WGEN Climate Driver:**
+- Uses `latitude` for Fourier-based seasonal temperature and radiation patterns
+- Automatically adjusts peak day based on hemisphere (N: day 200, S: day 20)
+
+**Snow17 (within Catchment):**
+- Uses `latitude` for melt calculations
+- Uses `elevation_m` for temperature adjustments and snow processes
+
+### Examples
+
+**Northern Hemisphere (USA):**
+```yaml
+site:
+  latitude: 40.5        # Central USA
+  elevation_m: 1500     # Mountain catchment
+  time_zone: -7         # Mountain Time
+```
+
+**Southern Hemisphere (Australia):**
+```yaml
+site:
+  latitude: -33.87      # Sydney area
+  elevation_m: 50       # Coastal catchment
+  time_zone: 10         # AEST
+```
+
+**Arctic Region:**
+```yaml
+site:
+  latitude: 68.5        # Northern Norway
+  elevation_m: 200
+  time_zone: 1          # CET
+```
+
+### Notes
+
+- **Latitude validation**: -90° (South Pole) to +90° (North Pole)
+- **Positive latitude** = Northern Hemisphere
+- **Negative latitude** = Southern Hemisphere
+- **Elevation** can be negative (below sea level) but must be reasonable for your location
+- **Time zone** is optional and used for timestamp localization
 
 ---
 
@@ -234,30 +319,6 @@ temperature:
   mode: stochastic
   seed: 42
   file: ../data/temp_params.csv
-```
-
-**Backward Compatibility Note:**
-
-For backward compatibility, the flat format (without `params:`) is still supported:
-
-```yaml
-# Legacy flat format (still supported)
-precipitation:
-  mode: stochastic
-  seed: 42
-  mean_annual: 800
-  wet_day_prob: 0.3
-  wet_wet_prob: 0.6
-  alpha: 1.0
-
-# Recommended nested format
-precipitation:
-  mode: stochastic
-  seed: 42
-  params:
-    mean_annual: 800
-    wet_day_prob: 0.3
-    wet_wet_prob: 0.6
     alpha: 1.0
 ```
 
@@ -325,24 +386,6 @@ climate:
     params:
       mean: 3.5  # mm/day
       std: 1.5  # mm/day
-```
-
-**Note:** ET drivers also support the flat format for backward compatibility:
-
-```yaml
-# Legacy flat format (still supported)
-et:
-  mode: stochastic
-  seed: 42
-  mean: 3.5
-  std: 1.5
-
-# Recommended nested format
-et:
-  mode: stochastic
-  seed: 42
-  params:
-    mean: 3.5
     std: 1.5
 ```
 
@@ -490,6 +533,56 @@ components:
 | `RiverDiversion` | River flow diversion |
 | `Junction` | Flow aggregation |
 
+### Data Connections
+
+Components can receive explicit data inputs using the `data_connections` field. This enables feedback control and complex data routing beyond automatic inflow connections.
+
+**Format:**
+
+```yaml
+components:
+  component_name:
+    type: ComponentType
+    # ... parameters ...
+    data_connections:
+      - source: source_component.output_name
+        output: output_name
+        input: input_name
+```
+
+**Example (Pump monitoring reservoir storage):**
+
+```yaml
+components:
+  reservoir:
+    type: Reservoir
+    initial_storage: 2000000
+    max_storage: 5000000
+    inflows:
+      - catchment.runoff
+
+  pump:
+    type: Pump
+    capacity: 50000
+    process_variable: reservoir.storage
+    target: 3000000
+    data_connections:
+      - source: reservoir.storage  # Monitor reservoir storage
+        output: storage
+        input: reservoir.storage
+      - source: demand.demand  # Receive demand request
+        output: demand
+        input: demand
+```
+
+**Notes:**
+- `source`: Component and output in dot notation (e.g., `reservoir.storage`)
+- `output`: Name of the output field from source component
+- `input`: Name of the input field in receiving component
+- Data connections are processed before each timestep via `_transfer_data()`
+- Enables feedback control: pump monitors reservoir, adjusts based on storage level
+- Different from `inflows` which define graph edges for execution ordering
+
 ### Meta Block
 
 Optional visualization metadata for each component.
@@ -581,14 +674,22 @@ reservoir_name:
 
 ### Pump
 
-**Constant Mode:**
+**Deadband Control Mode:**
 
 ```yaml
 pump_name:
   type: Pump
-  mode: constant  # Required
-  max_capacity_m3d: float  # Required
-  source: component_name  # Required
+  control_mode: deadband  # Required
+  capacity: float  # Required (m³/day)
+  process_variable: component.output  # Required (e.g., reservoir.storage)
+  target: float  # Required (constant target)
+  deadband: float  # Required for deadband mode
+  inflows:  # Optional (for execution ordering)
+    - component1.output1
+  data_connections:  # Required for receiving monitored values
+    - source: reservoir.storage
+      output: storage
+      input: reservoir.storage
   meta:  # Optional
     x: float
     y: float
@@ -596,22 +697,46 @@ pump_name:
     label: string
 ```
 
-**Variable Mode:**
+**Proportional Control Mode:**
 
 ```yaml
 pump_name:
   type: Pump
-  mode: variable  # Required
-  max_capacity_m3d: float  # Required
-  source: component_name  # Required
-  control_source: component_name  # Required
-  target_value: float  # Required
-  proportional_gain: float  # Required
+  control_mode: proportional  # Required
+  capacity: float  # Required (m³/day)
+  process_variable: component.output  # Required
+  target: float  # Required (constant) OR dict for seasonal
+  kp: float  # Required for proportional mode
+  inflows:  # Optional
+    - component1.output1
+  data_connections:  # Required for receiving monitored values
+    - source: reservoir.storage
+      output: storage
+      input: reservoir.storage
   meta:  # Optional
     x: float
     y: float
     color: string
     label: string
+```
+
+**Seasonal Target Example:**
+
+```yaml
+pump_with_seasonal_target:
+  type: Pump
+  control_mode: deadband
+  capacity: 50000
+  process_variable: reservoir.storage
+  target:
+    1: 2000000    # Jan 1: 2M m³
+    182: 3000000  # Jul 1: 3M m³ (summer target)
+    365: 2000000  # Dec 31: 2M m³
+  deadband: 500000
+  data_connections:
+    - source: reservoir.storage
+      output: storage
+      input: reservoir.storage
 ```
 
 **See [Component Reference](../COMPONENTS.md#pump) for parameter details.**
@@ -724,6 +849,10 @@ connections:
 name: "Simple Water Supply System"
 description: "Catchment feeding reservoir serving municipal demand"
 
+site:
+  latitude: 40.5
+  elevation_m: 500
+
 settings:
   start_date: "2020-01-01"
   end_date: "2020-12-31"
@@ -747,7 +876,6 @@ settings:
         std_tmin: 3
         std_tmax: 3
     et_method: hargreaves
-    latitude: 40.5
 
   visualization:
     figure_size: [12, 8]
@@ -816,6 +944,10 @@ components:
 name: "Multi-Catchment System"
 description: "Multiple catchments with river diversion for irrigation"
 
+site:
+  latitude: 40.5
+  elevation_m: 1200
+
 settings:
   start_date: "2020-01-01"
   end_date: "2020-12-31"
@@ -831,7 +963,6 @@ settings:
       tmin_column: tmin_c
       tmax_column: tmax_c
     et_method: hargreaves
-    latitude: 40.5
 
 components:
   upper_catchment:

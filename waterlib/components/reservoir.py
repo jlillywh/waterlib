@@ -267,8 +267,17 @@ class Reservoir(Component):
         Returns:
             Dictionary of output values for this timestep
         """
-        # Get inputs (default to 0 if not connected)
-        inflow = float(self.inputs.get('inflow', 0.0))
+        # Get inflows (sum all indexed inflows: inflow_1, inflow_2, etc.)
+        inflow = 0.0
+        for key, value in self.inputs.items():
+            if key.startswith('inflow_'):
+                inflow += float(value)
+
+        # Also check for legacy 'inflow' key for backward compatibility
+        if 'inflow' in self.inputs:
+            inflow += float(self.inputs['inflow'])
+
+        # Get release from inputs
         release = float(self.inputs.get('release', 0.0))
 
         # Ensure non-negative inputs
@@ -362,4 +371,4 @@ class Reservoir(Component):
         if self.current_area is not None:
             self.outputs['evaporation_loss'] = evaporation_loss
 
-        return self.outputs
+        return self.outputs.copy()

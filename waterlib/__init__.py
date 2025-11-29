@@ -14,7 +14,7 @@ Key Features:
 - Project scaffolding for quick setup
 """
 
-__version__ = "1.0.5"
+__version__ = "1.1.0"
 
 # Core functionality
 from waterlib.core.base import Component

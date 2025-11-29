@@ -32,9 +32,7 @@ class Snow17ParamsConfig(BaseModel):
     uadj: float = Field(0.05, ge=0, description="Wind function adjustment")
     tipm: float = Field(0.15, ge=0, le=1, description="Temperature index parameter")
     lapse_rate: float = Field(0.006, ge=0, description="Temperature lapse rate (°C/m)")
-    latitude: float = Field(45.0, ge=-90, le=90, description="Latitude in degrees")
-    elevation: Union[float, List[float]] = Field(1000.0, description="Elevation in meters")
-    ref_elevation: Optional[float] = Field(None, description="Reference elevation for temperature adjustment")
+    ref_elevation: Optional[float] = Field(None, description="Reference elevation for temperature adjustment (if different from site)")
     initial_swe: float = Field(0.0, ge=0, description="Initial snow water equivalent")
 
 
@@ -147,10 +145,14 @@ class Catchment(Component):
         Args:
             name: Unique component identifier
             **params: Component parameters (automatically validated by CatchmentConfig)
+                     Special parameter: _site (SiteConfig) - passed by loader, not from YAML
 
         Raises:
             ConfigurationError: If required parameters are missing or invalid
         """
+        # Extract site config before passing to parent (not a component parameter)
+        self._site = params.pop('_site', None)
+
         super().__init__(name, **params)
 
         # Validate all parameters using Pydantic model
@@ -188,15 +190,15 @@ class Catchment(Component):
                 lapse_rate=snow_config.lapse_rate
             )
 
-            # Store elevation and latitude for Snow17 inputs
-            self.latitude = snow_config.latitude
+            # Get latitude and elevation from site configuration
+            if self._site is None:
+                raise ConfigurationError(
+                    f"Catchment '{name}' with Snow17 requires site configuration. "
+                    f"Add a 'site:' block with latitude and elevation_m to your YAML."
+                )
 
-            # Handle elevation (can be single value or list)
-            if isinstance(snow_config.elevation, list):
-                self.elevation = snow_config.elevation[0]  # Use first elevation zone
-            else:
-                self.elevation = float(snow_config.elevation)
-
+            self.latitude = self._site.latitude
+            self.elevation = self._site.elevation_m
             self.ref_elevation = snow_config.ref_elevation or self.elevation
 
             # Initialize Snow17 state
@@ -340,4 +342,4 @@ class Catchment(Component):
         self.outputs['snow_water_equivalent'] = swe_mm
         self.outputs['swe_mm'] = swe_mm
 
-        return self.outputs
+        return self.outputs.copy()

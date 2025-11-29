@@ -385,8 +385,6 @@ def run_simulation(model: Model,
             seeds=seeds if seeds else None
         )
 
-        logger.info("Simulation completed successfully")
-
         return result
 
     finally:

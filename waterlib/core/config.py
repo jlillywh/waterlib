@@ -394,9 +394,9 @@ class WgenConfig:
         Raises:
             ValueError: If required parameters are missing or invalid
         """
-        # Required parameters
+        # Required parameters (latitude and elevation_m come from site config)
         required_params = [
-            'param_file', 'latitude', 'elevation_m', 'txmd', 'txmw', 'tn',
+            'param_file', 'txmd', 'txmw', 'tn',
             'atx', 'atn', 'cvtx', 'acvtx', 'cvtn', 'acvtn', 'dt_day'
         ]
 
@@ -407,10 +407,11 @@ class WgenConfig:
             )
 
         # Extract all parameters with defaults for optional ones
+        # Note: latitude and elevation_m come from site config at runtime
         return cls(
             param_file=wgen_dict['param_file'],
-            latitude=float(wgen_dict['latitude']),
-            elevation_m=float(wgen_dict['elevation_m']),
+            latitude=float(wgen_dict.get('latitude', 0.0)),  # Will be overridden by site config
+            elevation_m=float(wgen_dict.get('elevation_m', 0.0)),  # Will be overridden by site config
             txmd=float(wgen_dict['txmd']),
             txmw=float(wgen_dict['txmw']),
             tn=float(wgen_dict['tn']),

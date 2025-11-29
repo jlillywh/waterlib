@@ -110,4 +110,4 @@ class Junction(Component):
         # Update outputs
         self.outputs['outflow'] = total_flow
 
-        return self.outputs
+        return self.outputs.copy()

@@ -375,6 +375,32 @@ class DriverRegistry:
 
         logger.info(f"Registered driver: {name} ({type(driver).__name__})")
 
+    def update(self, name: str, driver: Driver) -> None:
+        """Update an existing driver's value without logging.
+
+        This method is used during simulation timesteps to efficiently update
+        driver values without generating log messages. It performs the same
+        operations as register() but without logging.
+
+        Args:
+            name: Name of driver to update (e.g., 'precipitation', 'temperature')
+            driver: New driver instance with updated value
+
+        Note:
+            This method is optimized for use in simulation loops where logging
+            would create excessive output (e.g., 366 timesteps × 3 drivers = 1,098 log lines).
+        """
+        # Store in legacy dictionary
+        self.drivers[name] = driver
+
+        # Also update in type-safe namespace
+        if name == 'precipitation':
+            self.climate.precipitation = driver
+        elif name == 'temperature':
+            self.climate.temperature = driver
+        elif name == 'et':
+            self.climate.et = driver
+
     def get(self, name: str, default: Optional[Any] = None) -> Optional[Driver]:
         """Get a driver by name with optional default.
 

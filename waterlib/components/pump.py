@@ -247,11 +247,12 @@ class Pump(Component):
         """Execute one timestep of pump operation.
 
         This method:
-        1. Gets current process variable value
-        2. Determines target value (constant or interpolated from schedule)
-        3. Calculates control error (target - current)
-        4. Determines pumped flow based on control mode
-        5. Returns outputs
+        1. Gets current process variable value (e.g., reservoir storage)
+        2. Gets demand request from inputs
+        3. Determines target value (constant or interpolated from schedule)
+        4. Calculates control error (current - target for withdrawal pumps)
+        5. Determines pumped flow based on control mode and demand
+        6. Returns outputs
 
         Args:
             date: Current simulation date
@@ -260,28 +261,48 @@ class Pump(Component):
         Returns:
             Dictionary of output values for this timestep
         """
-        # Get current process variable value
+        # Get current process variable value (e.g., reservoir storage)
         current_value = float(self.inputs.get(self.process_variable, 0.0))
+
+        # Get demand request (if provided)
+        demand_request = float(self.inputs.get('demand', 0.0))
 
         # Get target value for this date
         target_value = self._get_target_value(date)
 
-        # Calculate control error (target - current)
-        error = target_value - current_value
+        # Calculate control error (current - target for withdrawal)
+        # Positive error means storage is above target (can pump)
+        # Negative error means storage is below target (should not pump)
+        error = current_value - target_value
 
         # Determine pumped flow based on control mode
         if self.control_mode == 'deadband':
-            # Deadband control: ON/OFF based on error magnitude
-            if error > self.deadband:
-                # Error exceeds deadband - pump at full capacity
-                pumped_flow = self.capacity
+            # Deadband control for withdrawal pump:
+            # - If storage >> target: pump at capacity (drawdown mode)
+            # - If storage < target - deadband: pump ONLY to meet demand (conservation mode)
+            # - If storage within deadband: pump to meet demand (normal operation)
+
+            if error < -self.deadband:
+                # Storage well below target - conservation mode
+                # Only pump to meet demand, don't exceed it
+                pumped_flow = min(self.capacity, demand_request) if demand_request > 0 else 0.0
             else:
-                # Within deadband or negative error - pump off
-                pumped_flow = 0.0
+                # Storage above (target - deadband) - normal/drawdown operation
+                # Pump at capacity or demand, whichever is larger (when error > deadband)
+                # Or just meet demand (when within deadband)
+                if error > self.deadband:
+                    # Storage well above target - aggressive drawdown
+                    pumped_flow = self.capacity
+                else:
+                    # Within deadband - normal operation, meet demand
+                    pumped_flow = min(self.capacity, demand_request) if demand_request > 0 else 0.0
 
         elif self.control_mode == 'proportional':
             # Proportional control: Flow = Kp × error
             pumped_flow = self.kp * error
+            # Limit to demand if demand is specified
+            if demand_request > 0:
+                pumped_flow = min(pumped_flow, demand_request)
             # Clamp to [0, capacity]
             pumped_flow = max(0.0, min(pumped_flow, self.capacity))
 
@@ -290,4 +311,4 @@ class Pump(Component):
         self.outputs['error'] = error
         self.outputs['target_value'] = target_value
 
-        return self.outputs
+        return self.outputs.copy()

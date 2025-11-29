@@ -11,9 +11,10 @@ from datetime import datetime
 import logging
 import networkx as nx
 
-from waterlib.core.base import Component
+from waterlib.core.base import Component, SiteConfig
 from waterlib.climate import ClimateManager
 from waterlib.core.config import ModelSettings
+from waterlib.core.exceptions import ConfigurationError
 
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class Model:
         components: Dictionary mapping component names to component instances
         connections: List of connection specifications
         settings: Dictionary of simulation settings (dates, climate, etc.)
+        site: SiteConfig with physical site properties (latitude, elevation)
         graph: networkx.DiGraph representing component connections
         execution_order: List of component names in topological execution order
     """
@@ -41,6 +43,7 @@ class Model:
                  components: Optional[Dict[str, Component]] = None,
                  connections: Optional[List[Dict[str, str]]] = None,
                  settings: Optional[ModelSettings] = None,
+                 site: Optional[SiteConfig] = None,
                  yaml_dir: Optional[Path] = None):
         """Initialize Model with components and connections.
 
@@ -50,6 +53,7 @@ class Model:
             components: Dictionary of component instances
             connections: List of connection specifications (optional)
             settings: ModelSettings instance with simulation settings
+            site: SiteConfig with physical site properties (optional)
             yaml_dir: Directory containing YAML file (for resolving relative paths)
         """
         self.name = name
@@ -57,6 +61,7 @@ class Model:
         self.components = components or {}
         self.connections = connections or []
         self.settings = settings or ModelSettings.from_dict({})
+        self.site = site  # Physical site properties
 
         self.yaml_dir = yaml_dir or Path.cwd()
         self.graph: Optional[nx.DiGraph] = None
@@ -72,6 +77,7 @@ class Model:
         # Initialize DriverRegistry once (not in the loop!)
         from waterlib.core.drivers import DriverRegistry
         self.drivers = DriverRegistry()
+        self._drivers_registered = False  # Track if drivers have been registered
 
         climate_config = None
         if self.settings.climate is not None:
@@ -102,8 +108,6 @@ class Model:
                 # Convert WgenConfig to dict for ClimateManager
                 wgen_dict = {
                     'param_file': self.settings.climate.wgen_config.param_file,
-                    'latitude': self.settings.climate.wgen_config.latitude,
-                    'elevation_m': self.settings.climate.wgen_config.elevation_m,
                     'txmd': self.settings.climate.wgen_config.txmd,
                     'txmw': self.settings.climate.wgen_config.txmw,
                     'tn': self.settings.climate.wgen_config.tn,
@@ -116,6 +120,18 @@ class Model:
                     'dt_day': self.settings.climate.wgen_config.dt_day,
                     'seed': self.settings.climate.wgen_config.seed
                 }
+
+                # Get latitude and elevation from site config
+                # Site config is now required when using WGEN (enforced by loader)
+                if self.site is None:
+                    raise ConfigurationError(
+                        "WGEN requires site properties (latitude, elevation). "
+                        "Please add a 'site:' block to your YAML configuration."
+                    )
+
+                wgen_dict['latitude'] = self.site.latitude
+                wgen_dict['elevation_m'] = self.site.elevation_m
+
                 # Add optional parameters if present
                 if self.settings.climate.wgen_config.rs_mean is not None:
                     wgen_dict['rs_mean'] = self.settings.climate.wgen_config.rs_mean
@@ -291,15 +307,21 @@ class Model:
         if self.climate_manager:
             climate_data = self.climate_manager.get_climate_data(date)
 
-            # Register/update climate drivers with the data for this timestep
+            # First timestep: register drivers (with logging)
+            # Subsequent timesteps: update drivers silently for performance
+            driver_method = self.drivers.register if not self._drivers_registered else self.drivers.update
+
             if 'precipitation' in climate_data:
-                self.drivers.register('precipitation', SimpleDriver(climate_data['precipitation']))
+                driver_method('precipitation', SimpleDriver(climate_data['precipitation']))
             if 'tmin' in climate_data and 'tmax' in climate_data:
                 # Temperature driver provides avg temp for compatibility
                 tavg = (climate_data['tmin'] + climate_data['tmax']) / 2.0
-                self.drivers.register('temperature', SimpleDriver(tavg))
+                driver_method('temperature', SimpleDriver(tavg))
             if 'pet' in climate_data:
-                self.drivers.register('et', SimpleDriver(climate_data['pet']))
+                driver_method('et', SimpleDriver(climate_data['pet']))
+
+            # Mark drivers as registered after first timestep
+            self._drivers_registered = True
 
         # Execute components in order
         if not self.execution_order:
@@ -417,16 +439,19 @@ class Model:
             ax=ax
         )
 
-        # Draw edges
+        # Draw edges with prominent arrows
         nx.draw_networkx_edges(
             subgraph, pos,
-            edge_color='gray',
+            edge_color='#555555',
             arrows=True,
-            arrowsize=20,
-            arrowstyle='->',
-            width=2.0,
+            arrowsize=25,
+            arrowstyle='-|>',
+            width=2.5,
             connectionstyle='arc3,rad=0.1',
-            alpha=0.7,
+            alpha=0.8,
+            node_size=3000,
+            min_source_margin=15,
+            min_target_margin=15,
             ax=ax
         )
 

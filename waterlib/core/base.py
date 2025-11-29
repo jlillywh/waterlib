@@ -7,9 +7,36 @@ calculation, and value retrieval.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 from datetime import datetime
 import logging
+
+
+@dataclass
+class SiteConfig:
+    """Physical properties of the simulation site.
+
+    This dataclass stores geographic and physical characteristics of the
+    simulation site that are used by climate drivers and hydrological kernels.
+
+    Attributes:
+        latitude: Site latitude in decimal degrees (-90 to 90)
+        elevation_m: Site elevation in meters above sea level (default: 0.0)
+        time_zone: Optional time zone offset from UTC in hours
+
+    Example:
+        >>> site = SiteConfig(latitude=45.5, elevation_m=1200.0)
+        >>> site = SiteConfig(latitude=-33.8, elevation_m=50.0, time_zone=10.0)
+    """
+    latitude: float
+    elevation_m: float = 0.0
+    time_zone: Optional[float] = None
+
+    def __post_init__(self):
+        """Validate latitude after initialization."""
+        if not (-90 <= self.latitude <= 90):
+            raise ValueError(f"Latitude must be between -90 and 90. Got {self.latitude}")
 
 
 class Component(ABC):
