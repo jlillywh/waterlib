@@ -243,6 +243,32 @@ class ClimateDrivers:
         self._precipitation: Optional[Driver] = None
         self._temperature: Optional[Driver] = None
         self._et: Optional[Driver] = None
+        self._solar_radiation: Optional[Driver] = None
+    @property
+    def solar_radiation(self) -> Driver:
+        """Get solar radiation driver.
+
+        Returns:
+            Solar radiation driver instance
+
+        Raises:
+            AttributeError: If solar radiation driver not registered
+        """
+        if self._solar_radiation is None:
+            raise AttributeError(
+                "Solar radiation driver not registered. "
+                "Configure 'solar_radiation' in settings.climate section."
+            )
+        return self._solar_radiation
+
+    @solar_radiation.setter
+    def solar_radiation(self, driver: Driver) -> None:
+        """Set solar radiation driver."""
+        self._solar_radiation = driver
+
+    def has_solar_radiation(self) -> bool:
+        """Check if solar radiation driver is registered."""
+        return self._solar_radiation is not None
 
     @property
     def precipitation(self) -> Driver:
@@ -368,6 +394,12 @@ class DriverRegistry:
         # Also register in type-safe namespace
         if name == 'precipitation':
             self.climate.precipitation = driver
+        elif name == 'temperature':
+            self.climate.temperature = driver
+        elif name == 'et':
+            self.climate.et = driver
+        elif name == 'solar_radiation':
+            self.climate.solar_radiation = driver
         elif name == 'temperature':
             self.climate.temperature = driver
         elif name == 'et':

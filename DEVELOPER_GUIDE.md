@@ -544,6 +544,45 @@ from dataclasses import dataclass
 
 ---
 
+### 3.5 Backward Compatibility Policy
+
+**Strict Rule: Zero Legacy Support**
+
+During the current development phase, we prioritize **architectural correctness and code cleanliness over backward compatibility**.
+
+* **No Fallbacks:** Do not write logic to support deprecated YAML structures or old API signatures.
+* **Fail Fast:** If a schema changes, the loader must raise a `ConfigurationError` for old formats immediately. Do not attempt to "guess" or patch the data.
+* **Update Roots:** When changing an API or schema, the `scaffold.py` templates must be updated in the same commit.
+* **No Deprecation Warnings:** Do not clutter the logs with deprecation warnings. If a feature is removed, it is gone.
+
+**Rationale:** We currently have no external user base to support. Implementing backward compatibility at this stage introduces technical debt that slows down iteration and complicates the codebase with "dead" logic.
+
+**Example: Site Configuration Refactoring**
+
+When we moved `latitude` and `elevation_m` from `settings.climate.wgen_config` to a top-level `site:` block, we:
+
+1. ✅ Updated `parse_site_config()` to require the new `site:` block
+2. ✅ Removed all legacy fallback code immediately
+3. ✅ Updated `scaffold.py` templates in the same commit
+4. ✅ Made the error message clear and actionable
+
+We did **NOT**:
+- ❌ Add deprecation warnings
+- ❌ Support both old and new formats
+- ❌ Create adapter layers to translate old configs
+
+**Migration Path for Breaking Changes**
+
+If you introduce a breaking change:
+
+1. Update the schema or API in one clean commit
+2. Update all templates in `scaffold.py`
+3. Update documentation (`README.md`, `API_REFERENCE.md`)
+4. Write a clear error message that explains the new format
+5. Test that old formats fail with helpful error messages
+
+---
+
 ## 4. Component Development
 
 ### 4.1 Simulation Execution Flow
@@ -688,7 +727,7 @@ class MyComponent(Component):
             'storage': kernel_outputs.storage,
         }
 
-        return self.outputs
+        return self.outputs.copy()
 ```
 
 ### 4.3 Creating a New Component (Without Kernels)
@@ -782,7 +821,7 @@ class MyComponent(Component):
             'output1': output1,
             'state_var': self.state_var,
         }
-        return self.outputs
+        return self.outputs.copy()
 ```
 
 **Why Pydantic?**

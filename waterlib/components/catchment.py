@@ -255,6 +255,7 @@ class Catchment(Component):
         self.outputs['runoff_mm'] = 0.0
         self.outputs['snow_water_equivalent'] = 0.0
         self.outputs['swe_mm'] = 0.0
+        self.outputs['rain_plus_melt_mm'] = 0.0
 
     def step(self, date: datetime, drivers) -> dict:
         """Execute one timestep of catchment simulation.
@@ -276,7 +277,12 @@ class Catchment(Component):
         # New API: drivers.climate.precipitation instead of drivers.get('precipitation')
         try:
             precip = drivers.climate.precipitation.get_value(date)
-            temp = drivers.climate.temperature.get_value(date)
+            temp_data = drivers.climate.temperature.get_value(date)
+            # Temperature can be dict with tmin/tmax or scalar (for backward compatibility)
+            if isinstance(temp_data, dict):
+                temp = (temp_data['tmin'] + temp_data['tmax']) / 2.0
+            else:
+                temp = temp_data
             pet = drivers.climate.et.get_value(date)
         except AttributeError as e:
             self.logger.warning(
@@ -341,5 +347,6 @@ class Catchment(Component):
         self.outputs['runoff_mm'] = runoff_mm
         self.outputs['snow_water_equivalent'] = swe_mm
         self.outputs['swe_mm'] = swe_mm
+        self.outputs['rain_plus_melt_mm'] = effective_precip
 
         return self.outputs.copy()

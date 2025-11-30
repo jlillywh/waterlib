@@ -532,6 +532,7 @@ components:
 | `Demand` | Water extraction (municipal or agricultural) |
 | `RiverDiversion` | River flow diversion |
 | `Junction` | Flow aggregation |
+| `MetStation` | Climate data recorder for validation and analysis |
 
 ### Data Connections
 
@@ -810,6 +811,103 @@ junction_name:
 ```
 
 **See [Component Reference](../COMPONENTS.md#junction) for parameter details.**
+
+### MetStation
+
+Records and persists climate driver data (precipitation, temperature, solar radiation, ET0) for validation and analysis.
+
+```yaml
+met_station_name:
+  type: MetStation
+  log_precip: bool  # Optional, default: true
+  log_temp: bool    # Optional, default: true (logs both tmin and tmax)
+  log_solar: bool   # Optional, default: true
+  log_et0: bool     # Optional, default: true (reference ET)
+  meta:  # Optional
+    x: float
+    y: float
+    color: string
+    label: string
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `log_precip` | bool | No | true | Log precipitation data |
+| `log_temp` | bool | No | true | Log temperature data (tmin and tmax) |
+| `log_solar` | bool | No | true | Log solar radiation data |
+| `log_et0` | bool | No | true | Log reference ET data |
+
+**Outputs:**
+
+MetStation records data internally and provides export methods:
+- `to_dataframe()`: Returns pandas DataFrame with recorded data
+- `export_csv(path)`: Exports data to CSV file
+
+**Example (Log all climate variables):**
+
+```yaml
+components:
+  met_station:
+    type: MetStation
+    # Uses default config (all variables logged)
+    meta:
+      x: 0.1
+      y: 0.9
+      color: '#FFD700'
+      label: 'Climate Station'
+```
+
+**Example (Log only precipitation and temperature):**
+
+```yaml
+components:
+  met_station:
+    type: MetStation
+    config:
+      log_precip: true
+      log_temp: true
+      log_solar: false
+      log_et0: false
+    meta:
+      x: 0.1
+      y: 0.9
+      color: '#FFD700'
+      label: 'Precip/Temp Station'
+```
+
+**Usage in Python:**
+
+```python
+import waterlib
+
+# Load and run model
+model = waterlib.load_model('model.yaml')
+results = waterlib.run_simulation(model, output_dir='./results')
+
+# Export climate data
+met = model.components['met_station']
+met.export_csv('./results/climate_data.csv')
+
+# Or get as DataFrame
+df = met.to_dataframe()
+print(df.head())
+```
+
+**Notes:**
+- MetStation automatically receives climate data from the DriverRegistry
+- No explicit connections needed - climate data is globally available
+- Useful for validating climate inputs and analyzing weather patterns
+- Works with any climate mode (WGEN, timeseries, or stochastic)
+- Output columns depend on configuration and available drivers:
+  - `precip_mm`: Precipitation [mm/day]
+  - `tmin_c`: Minimum temperature [°C]
+  - `tmax_c`: Maximum temperature [°C]
+  - `solar_mjm2`: Solar radiation [MJ/m²/day]
+  - `et0_mm`: Reference evapotranspiration [mm/day]
+
+**See [Component Reference](../COMPONENTS.md#metstation) for more details.**
 
 ---
 

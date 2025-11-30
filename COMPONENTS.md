@@ -11,6 +11,7 @@ Complete reference for all waterlib components with parameters, inputs, outputs,
 5. [RiverDiversion](#riverdiversion)
 6. [Junction](#junction)
 7. [Weir](#weir)
+8. [MetStation](#metstation)
 
 ---
 
@@ -64,10 +65,12 @@ Snow17 processes precipitation into rain and snowmelt, which then feeds into AWB
 
 ### Inputs
 
-Climate data from drivers:
-- Precipitation [mm/day]
-- Temperature [°C]
-- ET (Evapotranspiration) [mm/day]
+Climate data from drivers (automatically provided by the DriverRegistry):
+- Precipitation [mm/day] - via `drivers.climate.precipitation.get_value(date)`
+- Temperature [°C] - via `drivers.climate.temperature.get_value(date)` (returns dict with 'tmin' and 'tmax')
+- ET (Evapotranspiration) [mm/day] - via `drivers.climate.et.get_value(date)`
+
+**Note:** Climate data source (WGEN, timeseries, or stochastic) is configured in `settings.climate` and is transparent to the component.
 
 ### Outputs
 
@@ -673,6 +676,121 @@ components:
 
 ---
 
+## MetStation
+
+Records and persists climate driver data for validation and analysis.
+
+### Description
+
+The MetStation component monitors and records climate data from the DriverRegistry at each timestep. It's useful for:
+- Validating climate inputs (WGEN, timeseries, or stochastic)
+- Analyzing weather patterns in your simulation
+- Exporting climate data for external analysis
+- Documenting climate conditions used in scenarios
+
+The component automatically receives climate data through the DriverRegistry and requires no explicit connections.
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `log_precip` | bool | No | True | Log precipitation data |
+| `log_temp` | bool | No | True | Log temperature data (tmin and tmax) |
+| `log_solar` | bool | No | True | Log solar radiation data |
+| `log_et0` | bool | No | True | Log reference ET data |
+
+### Inputs
+
+Climate data from drivers (automatically provided):
+- Precipitation [mm/day] - if `log_precip=True`
+- Temperature [°C] - if `log_temp=True` (records both tmin and tmax)
+- Solar radiation [MJ/m²/day] - if `log_solar=True`
+- Reference ET [mm/day] - if `log_et0=True`
+
+### Outputs
+
+MetStation stores data internally and provides export methods:
+
+**Python API:**
+- `to_dataframe()`: Returns pandas DataFrame with recorded data
+- `export_csv(path)`: Exports data to CSV file
+
+**DataFrame columns (depending on configuration):**
+- `precip_mm`: Precipitation [mm/day]
+- `tmin_c`: Minimum temperature [°C]
+- `tmax_c`: Maximum temperature [°C]
+- `solar_mjm2`: Solar radiation [MJ/m²/day]
+- `et0_mm`: Reference evapotranspiration [mm/day]
+
+### Example (Log all variables)
+
+```yaml
+components:
+  met_station:
+    type: MetStation
+    # Uses defaults (all variables logged)
+    meta:
+      x: 0.1
+      y: 0.9
+      color: '#FFD700'
+      label: 'Climate Station'
+```
+
+### Example (Selective logging)
+
+```yaml
+components:
+  precip_temp_station:
+    type: MetStation
+    log_precip: true
+    log_temp: true
+    log_solar: false
+    log_et0: false
+    meta:
+      x: 0.1
+      y: 0.9
+      color: '#FFD700'
+      label: 'Precip/Temp Only'
+```
+
+### Example (Python usage)
+
+```python
+import waterlib
+
+# Load and run model
+model = waterlib.load_model('model.yaml')
+results = waterlib.run_simulation(model, output_dir='./results')
+
+# Access MetStation component
+met = model.components['met_station']
+
+# Export to CSV
+met.export_csv('./results/climate_data.csv')
+
+# Or get as DataFrame for analysis
+df = met.to_dataframe()
+print(f"Recorded {len(df)} days of climate data")
+print(f"Mean precipitation: {df['precip_mm'].mean():.2f} mm/day")
+print(f"Mean temperature: {(df['tmin_c'] + df['tmax_c']).mean() / 2:.2f} °C")
+
+# Analyze patterns
+monthly = df.resample('M').mean()
+print(monthly)
+```
+
+### Notes
+
+- MetStation automatically receives climate data from the DriverRegistry
+- No explicit connections needed - climate data is globally available
+- Works with any climate mode (WGEN, timeseries, or stochastic)
+- Useful for documenting climate conditions in scenario analysis
+- Can be used to validate WGEN output against expected statistics
+- Minimal performance impact - simple data recording
+- If a climate driver is not available (e.g., no solar radiation configured), that column will be omitted from output
+
+---
+
 ## Component Selection Guide
 
 ### When to Use Each Component
@@ -686,6 +804,7 @@ components:
 | **RiverDiversion** | You need priority-based allocation from a river |
 | **Junction** | You need to combine multiple flows |
 | **Weir** | You need passive overflow based on elevation |
+| **MetStation** | You need to record and analyze climate data used in simulation |
 
 ### Common Component Combinations
 
@@ -759,6 +878,55 @@ Pumped water supply with level control
 ---
 
 ## Advanced Topics
+
+### Climate Data Integration
+
+Components that need climate data (Catchment, Demand in agricultural mode) access it through the **DriverRegistry** system. This provides a clean separation between climate data sources and component logic.
+
+**How it works:**
+
+1. **Configuration** - Climate mode is set in `settings.climate`:
+   ```yaml
+   settings:
+     climate:
+       precipitation:
+         mode: 'wgen'  # or 'timeseries' or 'stochastic'
+       temperature:
+         mode: 'wgen'
+       wgen_config:
+         param_file: 'data/wgen_params.csv'
+         # ... parameters ...
+   ```
+
+2. **Access** - Components use the DriverRegistry:
+   ```python
+   # Inside component's step() method:
+   precip = drivers.climate.precipitation.get_value(date)
+   temp = drivers.climate.temperature.get_value(date)  # Returns {'tmin': x, 'tmax': y}
+   et = drivers.climate.et.get_value(date)
+   ```
+
+3. **Flexibility** - Switch between modes without changing components:
+   ```yaml
+   # Change from WGEN to timeseries - components work the same!
+   settings:
+     climate:
+       precipitation:
+         mode: 'timeseries'
+         file: 'data/climate_timeseries.csv'
+         column: 'precip_mm'
+       temperature:
+         mode: 'timeseries'
+         file: 'data/climate_timeseries.csv'
+         tmin_column: 'tmin_c'
+         tmax_column: 'tmax_c'
+   ```
+
+**Benefits:**
+- **Source-agnostic**: Components don't know if data is synthetic or observed
+- **Easy switching**: Change climate mode in one place (settings block)
+- **Mixed modes**: Use WGEN for some variables, timeseries for others
+- **Type-safe**: IDE autocomplete with `drivers.climate.precipitation`
 
 ### Component Interactions
 

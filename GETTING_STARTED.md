@@ -319,7 +319,7 @@ waterlib_projects/
     │   ├── models/
     │   ├── data/
     │   └── ...
-    └── custom_script.py        # Your custom scripts
+    └── run_model.py            # Your custom scripts
 ```
 
 **Every time you work on this project:**
@@ -327,7 +327,7 @@ waterlib_projects/
 ```bash
 cd C:\Users\JasonLillywhite\waterlib_projects\my_reservoir_model
 .venv\Scripts\activate
-python custom_script.py
+python run_model.py
 ```
 
 #### Developer Workflow (Modifying waterlib)
@@ -482,7 +482,7 @@ You have two options for creating your first model:
 
 The fastest way to get started is using the `create_project()` function, which generates a complete working project with examples.
 
-#### Step 1: Create a New Project
+#### Step1: Create a New Project
 
 ```python
 import waterlib
@@ -496,19 +496,19 @@ This creates a complete project structure:
 
 ```
 my_first_model/
-├── README.md                    # Project documentation
+├── README.md # Project documentation
 ├── models/
-│   └── baseline.yaml            # Working model configuration
+│ └── baseline.yaml # Working model configuration
 ├── data/
-│   ├── wgen_params.csv          # Weather generator parameters
-│   ├── climate_timeseries.csv   # Example climate data
-│   └── README.md                # Data documentation
-├── outputs/                     # Results directory
-├── config/                      # Configuration directory
-└── run_model.py                 # Sample Python script
+│ ├── wgen_params.csv # Weather generator parameters
+│ ├── climate_timeseries.csv # Example climate data
+│ └── README.md # Data documentation
+├── outputs/ # Results directory
+├── config/ # Configuration directory
+└── run_model.py # Sample Python script
 ```
 
-#### Step 2: Run the Example Model
+#### Step2: Run the Example Model
 
 Navigate to your project and run the included script:
 
@@ -522,15 +522,15 @@ You'll see output like:
 ```
 Loading model...
 Running simulation...
-Running simulation: 100%|██████████| 365/365 [00:02<00:00, 156.23 timesteps/s]
+Running simulation:100%|██████████|365/365 [00:02<00:00,156.23 timesteps/s]
 
 Simulation complete!
-Simulated 365 days
+Simulated365 days
 
 Reservoir storage statistics:
-  Mean: 2847392 m³
-  Min:  1523891 m³
-  Max:  4123456 m³
+ Mean:2847392 m³
+ Min:1523891 m³
+ Max:4123456 m³
 
 Saving results...
 Plots saved to: outputs/simulation_plots.png
@@ -538,7 +538,7 @@ Plots saved to: outputs/simulation_plots.png
 Done!
 ```
 
-#### Step 3: Explore and Modify
+#### Step3: Explore and Modify
 
 Open `models/baseline.yaml` in your text editor and explore the model structure. Try modifying:
 
@@ -560,8 +560,8 @@ waterlib.create_project("minimal_model", include_examples=False)
 ```python
 # Create in a custom directory
 waterlib.create_project(
-    "regional_model",
-    parent_dir="/projects/water_resources"
+ "regional_model",
+ parent_dir="/projects/water_resources"
 )
 ```
 
@@ -575,13 +575,17 @@ waterlib.create_project("my_model", overwrite=True)
 
 If you want to learn the YAML structure from the ground up, follow these steps to build a simple catchment-reservoir-demand system.
 
-### Step 1: Create the YAML File
+### Step1: Create the YAML File
 
 Create a file called `first_model.yaml`:
 
 ```yaml
 name: "My First Water Model"
 description: "A simple catchment feeding a reservoir serving a city"
+
+site:
+  latitude: 45.0
+  elevation_m: 1200
 
 settings:
   start_date: "2020-01-01"
@@ -596,8 +600,6 @@ settings:
 
     wgen_config:
       param_file: '../data/wgen_params.csv'
-      latitude: 40.5
-      elevation_m: 500.0
       # Temperature parameters (°C)
       txmd: 20.0    # Mean daily max temp (dry days)
       txmw: 18.0    # Mean daily max temp (wet days)
@@ -621,7 +623,7 @@ components:
   catchment:
     type: Catchment
     area_km2: 100.0
-    snow17_params:
+    snow17_params:  # Latitude/elevation from site block
       scf: 1.0
       mfmax: 1.5
     awbm_params:
@@ -646,7 +648,7 @@ components:
     per_capita_demand_lpd: 200
 ```
 
-### Step 2: Run the Simulation
+### Step2: Run the Simulation
 
 Create a Python script `run_model.py`:
 
@@ -658,9 +660,9 @@ model = waterlib.load_model('first_model.yaml')
 
 # Run the simulation
 results = waterlib.run_simulation(
-    model,
-    output_dir='./results',
-    generate_plots=True
+ model,
+ output_dir='./results',
+ generate_plots=True
 )
 
 # Print summary statistics
@@ -670,7 +672,7 @@ print(f"Total demand supplied: {results.dataframe['demand.supplied'].sum():,.0f}
 print(f"Total deficit: {results.dataframe['demand.deficit'].sum():,.0f} m³")
 ```
 
-### Step 3: Run It
+### Step3: Run It
 
 ```bash
 python run_model.py
@@ -680,9 +682,9 @@ You'll see output like:
 
 ```
 Simulation complete!
-Mean reservoir storage: 2,847,392 m³
-Total demand supplied: 3,650,000 m³
-Total deficit: 0 m³
+Mean reservoir storage:2,847,392 m³
+Total demand supplied:3,650,000 m³
+Total deficit:0 m³
 ```
 
 And find these files in `./results/`:
@@ -986,6 +988,10 @@ waterlib uses the WGEN weather generator for synthetic climate data.
 Perfect for planning studies and scenario analysis:
 
 ```yaml
+site:
+  latitude: 40.5
+  elevation_m: 500.0
+
 settings:
   climate:
     precipitation:
@@ -996,8 +1002,6 @@ settings:
 
     wgen_config:
       param_file: 'data/wgen_params.csv'  # Monthly precipitation parameters
-      latitude: 40.5
-      elevation_m: 500.0
 
       # Temperature parameters (°C)
       txmd: 20.0    # Mean daily max temp (dry days)
@@ -1019,6 +1023,8 @@ settings:
       min_rain_mm: 0.1
       seed: 42      # For reproducibility (optional)
 ```
+
+**Note:** Latitude and elevation are specified in the top-level `site:` block and are used by WGEN for calculations.
 
 **WGEN Parameters File:**
 
@@ -1078,19 +1084,77 @@ date,precip_mm,tmin_c,tmax_c
 - Date column must be parseable by pandas (YYYY-MM-DD recommended)
 - You can mix modes (e.g., WGEN precip with timeseries temperature)
 
+### Switching Between WGEN and Timeseries
+
+One of waterlib's strengths is the ability to easily switch between synthetic (WGEN) and observed (timeseries) climate data. You can even mix modes - using WGEN for some variables and timeseries for others!
+
+**Example: Switch from WGEN to Timeseries**
+
+Change this:
+```yaml
+settings:
+  climate:
+    precipitation:
+      mode: 'wgen'
+    temperature:
+      mode: 'wgen'
+    wgen_config:
+      param_file: 'data/wgen_params.csv'
+      # ... parameters ...
+```
+
+To this:
+```yaml
+settings:
+  climate:
+    precipitation:
+      mode: 'timeseries'
+      file: 'data/climate_timeseries.csv'
+      column: 'precip_mm'
+    temperature:
+      mode: 'timeseries'
+      file: 'data/climate_timeseries.csv'
+      tmin_column: 'tmin_c'
+      tmax_column: 'tmax_c'
+    et_method: 'hargreaves'
+    latitude: 40.5
+```
+
+**Example: Mixed Mode (WGEN precip, observed temps)**
+
+```yaml
+settings:
+  climate:
+    precipitation:
+      mode: 'wgen'
+    temperature:
+      mode: 'timeseries'
+      file: 'data/observed_temps.csv'
+      tmin_column: 'tmin'
+      tmax_column: 'tmax'
+    wgen_config:
+      param_file: 'data/wgen_params.csv'
+      # ... parameters ...
+```
+
+**No component changes needed!** Components access climate data through the DriverRegistry, so they don't care about the source.
+
 ### Why Climate Drivers?
 
 In waterlib, climate data is provided through a **DriverRegistry** system that makes climate data available to all components without explicit connections. This means:
 
 **Clean and simple:**
 ```yaml
+site:
+  latitude: 40.5
+  elevation_m: 500
+
 settings:
   climate:
     precipitation:
       mode: 'wgen'
     wgen_config:
       param_file: 'data/wgen_params.csv'
-      latitude: 40.5
       # ... other parameters ...
 
 components:
@@ -1101,9 +1165,10 @@ components:
 
 The DriverRegistry system provides:
 - **Centralized climate data**: All components access the same climate time series
-- **Consistent interface**: Components use `drivers.get('precipitation')`, `drivers.get('temperature')`, etc.
+- **Consistent interface**: Components use `drivers.climate.precipitation`, `drivers.climate.temperature`, etc.
 - **Clean models**: No need to wire climate data to every component
-- **Flexible sources**: Support for timeseries files, WGEN, or custom drivers
+- **Flexible sources**: Support for timeseries files, WGEN, or stochastic generators
+- **Easy switching**: Change data source without modifying components
 
 This keeps your models cleaner and more maintainable.
 

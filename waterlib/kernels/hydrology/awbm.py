@@ -151,9 +151,9 @@ def awbm_step(
     Qin3 = max(P3 - PET3, 0.0)
 
     # Overflow from each store
-    O1 = max(Qin1 + (SS1 - Cap1), 0.0)
-    O2 = max(Qin2 + (SS2 - Cap2), 0.0)
-    O3 = max(Qin3 + (SS3 - Cap3), 0.0)
+    O1 = max((SS1 + Qin1) - Cap1, 0.0)
+    O2 = max((SS2 + Qin2) - Cap2, 0.0)
+    O3 = max((SS3 + Qin3) - Cap3, 0.0)
 
     # Update surface stores
     SS1_new = max(SS1 + (P1 - PET1 - O1), 0.0)

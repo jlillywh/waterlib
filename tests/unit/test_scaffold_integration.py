@@ -51,8 +51,12 @@ class TestScaffoldingIntegration:
             assert 'wgen_config' in climate
             wgen = climate['wgen_config']
             assert 'param_file' in wgen
-            assert 'latitude' in wgen
-            assert 'elevation_m' in wgen
+
+            # Check site configuration (latitude/elevation are now in site: block)
+            assert 'site' in yaml_content
+            site = yaml_content['site']
+            assert 'latitude' in site
+            assert 'elevation_m' in site
 
     def test_generated_baseline_yaml_loads_successfully(self):
         """Test that generated baseline.yaml can be loaded by ClimateSettings."""

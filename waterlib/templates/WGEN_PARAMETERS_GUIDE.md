@@ -137,58 +137,79 @@ The peak day (warmest/highest radiation day) is automatically calculated based o
 ### Full WGEN Configuration
 
 ```yaml
-wgen_config:
-  # Monthly precipitation parameters (CSV file)
-  param_file: "data/wgen_params.csv"
+# Site configuration (required for WGEN)
+site:
+  latitude: 40.76   # degrees, -90 to 90
+  elevation_m: 500  # meters above sea level
 
-  # Location (required for Fourier calculations)
-  latitude: 40.76  # degrees, -90 to 90
+settings:
+  climate:
+    precipitation:
+      mode: wgen
+    temperature:
+      mode: wgen
 
-  # Temperature parameters (Celsius at interface)
-  txmd: 18.5    # Mean max temp on dry days (°C)
-  atx: 15.1     # Amplitude of max temp seasonal variation (°C)
-  txmw: 15.3    # Mean max temp on wet days (°C)
-  tn: 4.8       # Mean min temp (°C)
-  atn: 11.7     # Amplitude of min temp seasonal variation (°C)
-  cvtx: 0.01675   # Coefficient of variation for Tmax mean
-  acvtx: -0.00383 # Coefficient of variation for Tmax amplitude
-  cvtn: 0.01605   # Coefficient of variation for Tmin mean
-  acvtn: -0.00345 # Coefficient of variation for Tmin amplitude
+    wgen_config:
+      # Monthly precipitation parameters (CSV file)
+      param_file: "data/wgen_params.csv"
 
-  # Solar radiation parameters (MJ/m²/day)
-  rmd: 12.9     # Mean solar radiation on dry days
-  ar: 10.2      # Amplitude of solar radiation seasonal variation
-  rmw: 12.9     # Mean solar radiation on wet days
+      # Temperature parameters (Celsius at interface)
+      txmd: 18.5    # Mean max temp on dry days (°C)
+      atx: 15.1     # Amplitude of max temp seasonal variation (°C)
+      txmw: 15.3    # Mean max temp on wet days (°C)
+      tn: 4.8       # Mean min temp (°C)
+      atn: 11.7     # Amplitude of min temp seasonal variation (°C)
+      cvtx: 0.01675   # Coefficient of variation for Tmax mean
+      acvtx: -0.00383 # Coefficient of variation for Tmax amplitude
+      cvtn: 0.01605   # Coefficient of variation for Tmin mean
+      acvtn: -0.00345 # Coefficient of variation for Tmin amplitude
 
-  # Optional: Random seed for reproducibility
-  random_seed: 42
+      # Solar radiation parameters (MJ/m²/day)
+      rmd: 12.9     # Mean solar radiation on dry days
+      ar: 10.2      # Amplitude of solar radiation seasonal variation
+      rmw: 12.9     # Mean solar radiation on wet days
+
+      # Optional: Random seed for reproducibility
+      random_seed: 42
 ```
+
+**Note:** Latitude and elevation are specified in the top-level `site:` block, not within `wgen_config`. WGEN automatically uses these site properties for Fourier-based calculations.
 
 ### Minimal Configuration (Using Defaults)
 
 If you only have precipitation data and basic temperature information:
 
 ```yaml
-wgen_config:
-  # Required
-  param_file: "data/wgen_params.csv"
+site:
   latitude: 40.76
+  elevation_m: 500
 
-  # Minimum temperature parameters
-  txmd: 18.5
-  atx: 15.1
-  txmw: 15.3
-  tn: 4.8
-  atn: 11.7
-  cvtx: 0.01675
-  acvtx: -0.00383
-  cvtn: 0.01605
-  acvtn: -0.00345
+settings:
+  climate:
+    precipitation:
+      mode: wgen
+    temperature:
+      mode: wgen
 
-  # Minimum radiation parameters
-  rmd: 12.9
-  ar: 10.2
-  rmw: 12.9
+    wgen_config:
+      # Required
+      param_file: "data/wgen_params.csv"
+
+      # Minimum temperature parameters
+      txmd: 18.5
+      atx: 15.1
+      txmw: 15.3
+      tn: 4.8
+      atn: 11.7
+      cvtx: 0.01675
+      acvtx: -0.00383
+      cvtn: 0.01605
+      acvtn: -0.00345
+
+      # Minimum radiation parameters
+      rmd: 12.9
+      ar: 10.2
+      rmw: 12.9
 ```
 
 ### Southern Hemisphere Example
@@ -196,8 +217,19 @@ wgen_config:
 For a location in the Southern Hemisphere (e.g., Sydney, Australia):
 
 ```yaml
-wgen_config:
-  param_file: "data/sydney_wgen_params.csv"
+site:
+  latitude: -33.87  # Negative for Southern Hemisphere
+  elevation_m: 50
+
+settings:
+  climate:
+    precipitation:
+      mode: wgen
+    temperature:
+      mode: wgen
+
+    wgen_config:
+      param_file: "data/sydney_wgen_params.csv"
 
   # Negative latitude for Southern Hemisphere
   latitude: -33.87

@@ -293,17 +293,19 @@ class Model:
         2. Updates the persistent DriverRegistry with current timestep data
         3. Transfers data between components (Pre-Step Data Transfer phase)
         4. Executes each component's step() method in topological order
-        5. Collects and returns all component outputs
+        5. Collects and returns all component outputs (including climate data)
 
         Args:
             date: Current simulation date
 
         Returns:
-            Dictionary mapping component names to their output dictionaries
+            Dictionary mapping component names to their output dictionaries.
+            Includes 'climate' key with precipitation_mm, tmin_c, tmax_c if ClimateManager is active.
         """
         # Update climate data in the persistent DriverRegistry
         from waterlib.core.drivers import SimpleDriver
 
+        climate_data = None
         if self.climate_manager:
             climate_data = self.climate_manager.get_climate_data(date)
 
@@ -314,11 +316,14 @@ class Model:
             if 'precipitation' in climate_data:
                 driver_method('precipitation', SimpleDriver(climate_data['precipitation']))
             if 'tmin' in climate_data and 'tmax' in climate_data:
-                # Temperature driver provides avg temp for compatibility
-                tavg = (climate_data['tmin'] + climate_data['tmax']) / 2.0
-                driver_method('temperature', SimpleDriver(tavg))
+                # Temperature driver provides dict with tmin/tmax for components that need both
+                # Components needing average can calculate: (tmin + tmax) / 2
+                temp_dict = {'tmin': climate_data['tmin'], 'tmax': climate_data['tmax']}
+                driver_method('temperature', SimpleDriver(temp_dict))
             if 'pet' in climate_data:
                 driver_method('et', SimpleDriver(climate_data['pet']))
+            if 'solar_radiation' in climate_data:
+                driver_method('solar_radiation', SimpleDriver(climate_data['solar_radiation']))
 
             # Mark drivers as registered after first timestep
             self._drivers_registered = True
@@ -335,6 +340,14 @@ class Model:
             component = self.components[comp_name]
             outputs = component.step(date, self.drivers)
             results[comp_name] = outputs
+
+        # Add climate data to results if available
+        if climate_data:
+            results['climate'] = {
+                'precipitation_mm': climate_data['precipitation'],
+                'tmin_c': climate_data['tmin'],
+                'tmax_c': climate_data['tmax'],
+            }
 
         return results
 

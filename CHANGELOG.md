@@ -2,6 +2,63 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.2] - 2025-11-29
+### Added
+- **NEW COMPONENT**: `MetStation` component for recording and persisting climate driver data
+  - Records precipitation, temperature (tmin/tmax), solar radiation, and reference ET
+  - Configurable logging: choose which climate variables to record via direct parameters
+  - Export methods: `to_dataframe()` and `export_csv(path)`
+  - Useful for validating climate inputs and analyzing weather patterns
+  - Works with any climate mode (WGEN, timeseries, or stochastic)
+  - Automatically receives climate data from DriverRegistry (no explicit connections needed)
+  - 13 comprehensive unit tests covering all functionality and edge cases
+  - **YAML format**: Parameters passed directly (e.g., `log_precip: true`), not nested under `config:`
+
+### Changed
+- **Temperature data format**: DriverRegistry now provides temperature as `{'tmin': x, 'tmax': y}` dict instead of scalar average
+  - Catchment component updated to handle both dict and scalar formats (backward compatible)
+  - Enables components to access both tmin and tmax when needed
+  - MetStation can now properly record both temperature values
+- **Solar radiation driver**: Now properly registered in DriverRegistry when available
+- Updated project scaffolding template to include commented-out MetStation example
+- Enhanced sample script to automatically export climate data if MetStation is enabled
+
+### Documentation
+- Added MetStation to API_REFERENCE.md with complete Python API documentation
+- Added MetStation to YAML_SCHEMA.md with configuration examples
+- Added MetStation to COMPONENTS.md with detailed usage guide
+- Enhanced climate data documentation in README.md, GETTING_STARTED.md, and COMPONENTS.md:
+  - How to switch between WGEN and timeseries modes
+  - Mixed mode examples (WGEN + timeseries)
+  - Emphasis on source-agnostic component design
+  - Type-safe DriverRegistry API examples
+- Updated all documentation to show new temperature dict format
+
+### Fixed
+- Temperature driver registration now provides full tmin/tmax data instead of just average
+- Solar radiation driver now properly registered when configured
+- **MetStation parameter structure**: Fixed inconsistency - parameters are now passed directly in YAML (matching standard component pattern) instead of nested under `config:` key
+  - YAML: `log_precip: true` (not `config: {log_precip: true}`)
+  - Python: `MetStation(drivers, log_precip=True)` (not `MetStation(drivers, config=...)`)
+  - Consistent with other components like Reservoir, Catchment, etc.
+
+### Development Tooling
+- **NEW**: Kiro steering file (`.kiro/steering/waterlib-workflow.md`) for automated workflow guidance
+  - Loads DEVELOPER_GUIDE.md and QA_INFRASTRUCTURE.md into Kiro context
+  - Enforces kernel purity rule and Pydantic validation patterns
+  - Provides documentation synchronization checklists
+  - Defines task execution pattern (lint → test → doc check)
+- **NEW**: Documentation sync checker (`scripts/check_doc_sync.py`)
+  - Scans git diff to detect which docs need updates
+  - Generates checklist for COMPONENTS.md, API_REFERENCE.md, CHANGELOG.md
+  - Integrated into pre-commit hooks for automatic validation
+- **ENHANCED**: Pre-commit configuration with new hooks
+  - `waterlib-lint`: Enforces kernel purity (blocks commits with violations)
+  - `doc-sync-check`: Warns about missing documentation updates
+  - Provides fast feedback loop during development
+
+---
+
 ## [1.1.1] - 2025-11-28
 ### Fixed
 - **CRITICAL**: Scaffold template now includes proper data connections between reservoir and demand

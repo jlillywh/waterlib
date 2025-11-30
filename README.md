@@ -118,6 +118,10 @@ Create a file `my_model.yaml`:
 name: "Simple Catchment-Reservoir System"
 description: "Basic example with catchment, reservoir, and demand"
 
+site:
+  latitude: 40.5
+  elevation_m: 500
+
 settings:
   start_date: "2020-01-01"
   end_date: "2020-12-31"
@@ -135,7 +139,6 @@ settings:
         mean_tmin: 5   # °C
         mean_tmax: 20  # °C
     et_method: 'hargreaves'
-    latitude: 40.5
 
   visualization:
     figure_size: [12, 8]
@@ -422,6 +425,8 @@ Simulates rainfall-runoff with integrated snow processes (Snow17) and water bala
 - `snow17_params`: Dictionary of Snow17 parameters (required)
 - `awbm_params`: Dictionary of AWBM parameters (required)
 
+**Note:** When using Snow17, a top-level `site:` block with `latitude` and `elevation_m` is required.
+
 **Inputs (from climate drivers):**
 - Precipitation [mm/day] - accessed via `drivers.get('precipitation')`
 - Temperature [°C] - accessed via `drivers.get('temperature')`
@@ -433,12 +438,17 @@ Simulates rainfall-runoff with integrated snow processes (Snow17) and water bala
 
 **Example:**
 ```yaml
-catchment:
-  type: Catchment
-  area_km2: 100.0
-  snow17_params:
-    scf: 1.0
-    mfmax: 1.5
+site:
+  latitude: 40.5
+  elevation_m: 1200
+
+components:
+  catchment:
+    type: Catchment
+    area_km2: 100.0
+    snow17_params:  # Latitude/elevation from site block
+      scf: 1.0
+      mfmax: 1.5
     mfmin: 0.5
     uadj: 0.04
     si: 1000.0
@@ -629,6 +639,14 @@ confluence:
 
 waterlib provides built-in climate utilities that are available to all components without requiring explicit YAML component definitions. This eliminates boilerplate and makes models cleaner.
 
+### Three Climate Modes
+
+waterlib supports three modes for each climate variable, and you can mix modes (e.g., WGEN precipitation with timeseries temperature):
+
+1. **WGEN**: Stochastic weather generator (Markov chain-gamma model)
+2. **Timeseries**: Load actual data from CSV files
+3. **Stochastic**: Simple stochastic generators (legacy)
+
 ### Configuration
 
 Climate utilities are configured in the `settings.climate` block of your YAML file:
@@ -661,23 +679,6 @@ settings:
 **Note on Configuration Format:**
 
 For stochastic mode, parameters are nested under `params:` as shown above. This keeps the configuration organized and makes it clear which parameters belong to the climate driver.
-
-**Backward Compatibility:** If you have existing models that use flat parameter syntax (parameters at the same level as `mode:`), they will continue to work. Both formats are supported:
-
-```yaml
-# New format (recommended) - nested params:
-precipitation:
-  mode: 'stochastic'
-  params:
-    mean_annual: 800
-    wet_day_prob: 0.3
-
-# Old format (still supported) - flat parameters:
-precipitation:
-  mode: 'stochastic'
-  mean_annual: 800
-  wet_day_prob: 0.3
-```
 
 ### PrecipGen (Stochastic Precipitation)
 
@@ -754,23 +755,62 @@ Where:
 
 ### Timeseries Mode
 
-Alternatively, load actual climate data from CSV files:
+Load actual climate data from CSV files:
 
 ```yaml
 settings:
   climate:
     precipitation:
       mode: 'timeseries'
-      file: 'data/precip.csv'
+      file: 'data/climate_timeseries.csv'
       column: 'precip_mm'
     temperature:
       mode: 'timeseries'
-      file: 'data/temp.csv'
+      file: 'data/climate_timeseries.csv'
       tmin_column: 'tmin_c'
       tmax_column: 'tmax_c'
+    solar_radiation:
+      mode: 'timeseries'
+      file: 'data/climate_timeseries.csv'
+      column: 'solar_mjm2'
     et_method: 'hargreaves'
     latitude: 40.5
 ```
+
+**CSV file format:**
+```csv
+date,precip_mm,tmin_c,tmax_c,solar_mjm2
+2020-01-01,5.2,2.1,12.3,8.5
+2020-01-02,0.0,3.4,14.2,10.2
+2020-01-03,12.5,1.8,10.5,6.3
+```
+
+### Switching Between Modes
+
+One of waterlib's strengths is the ability to easily switch between modes without changing component definitions:
+
+**Switch from WGEN to Timeseries:**
+Just change the `mode` parameter in your YAML - no component changes needed!
+
+**Mixed Mode (WGEN + Timeseries):**
+```yaml
+settings:
+  climate:
+    precipitation:
+      mode: 'wgen'  # Synthetic precipitation
+    temperature:
+      mode: 'timeseries'  # Observed temperatures
+      file: 'data/observed_temps.csv'
+      tmin_column: 'tmin'
+      tmax_column: 'tmax'
+    solar_radiation:
+      mode: 'wgen'  # Synthetic solar radiation
+    wgen_config:
+      param_file: 'data/wgen_params.csv'
+      # ... WGEN parameters ...
+```
+
+Components automatically receive climate data through the DriverRegistry - they don't know or care about the source!
 
 ### How Components Access Climate Data
 
@@ -782,16 +822,20 @@ Components that need climate data (like Catchment) automatically receive it thro
 settings:
   climate:
     precipitation:
-      mode: 'stochastic'
-      params:
-        mean_annual: 800
+      mode: 'wgen'  # or 'timeseries' or 'stochastic'
+    temperature:
+      mode: 'wgen'
+    wgen_config:
+      param_file: 'data/wgen_params.csv'
+      # ... parameters ...
 
-# Catchment automatically receives precipitation through drivers
+# Catchment automatically receives climate data through drivers
 components:
   catchment:
     type: Catchment
     area_km2: 100.0
     # No need to specify precipitation source!
+    # Works the same regardless of climate mode!
 ```
 
 **Type-safe API with IDE autocompletion:**
@@ -800,25 +844,27 @@ components:
 def step(self, date, drivers):
     # New API: attribute-based access with autocompletion
     precip = drivers.climate.precipitation.get_value(date)
-    temp = drivers.climate.temperature.get_value(date)
+    temp = drivers.climate.temperature.get_value(date)  # Returns {'tmin': x, 'tmax': y}
     et = drivers.climate.et.get_value(date)
+
+    # For components needing average temperature:
+    if isinstance(temp, dict):
+        tavg = (temp['tmin'] + temp['tmax']) / 2.0
+    else:
+        tavg = temp  # Backward compatibility
 
     # Benefits:
     # - IDE autocomplete: type "drivers.climate." and see options
     # - Typos caught at design time, not runtime
     # - No magic strings: AttributeError if you type "precip" instead of "precipitation"
-```
-
-**Legacy API (still supported):**
-```python
-# Old string-based lookup (works but no IDE support)
-precip = drivers.get('precipitation').get_value(date)
+    # - Source-agnostic: Works with WGEN, timeseries, or stochastic modes
 ```
 
 **How it works internally:**
-- The framework creates a `DriverRegistry` containing all climate utilities (precipitation, temperature, ET)
+- The framework creates a `DriverRegistry` containing all climate utilities (precipitation, temperature, ET, solar radiation)
 - Each component's `step(date, drivers)` method receives this registry
 - Components use `drivers.climate.precipitation` for type-safe access with IDE autocompletion
+- The ClimateManager handles data generation/loading and updates the DriverRegistry each timestep
 
 ### Visualization Exclusion
 
@@ -923,6 +969,12 @@ results.plot(
 name: "Model Name"
 description: "Model description"
 
+# Physical site properties
+site:
+  latitude: 40.5        # Decimal degrees (-90 to 90)
+  elevation_m: 500      # Meters above sea level
+  time_zone: -7.0       # Optional: UTC offset in hours
+
 # Simulation settings
 settings:
   # Date range
@@ -932,7 +984,7 @@ settings:
   # Climate configuration
   climate:
     precipitation:
-      mode: 'stochastic'  # or 'timeseries'
+      mode: 'stochastic'  # or 'timeseries' or 'wgen'
       params:  # for stochastic mode - nested parameters
         mean_annual: 800
         wet_day_prob: 0.3
@@ -944,7 +996,7 @@ settings:
       # column: 'precip_mm'
 
     temperature:
-      mode: 'stochastic'  # or 'timeseries'
+      mode: 'stochastic'  # or 'timeseries' or 'wgen'
       params:  # for stochastic mode - nested parameters
         mean_tmin: 5
         mean_tmax: 20
@@ -959,7 +1011,22 @@ settings:
       # tmax_column: 'tmax_c'
 
     et_method: 'hargreaves'
-    latitude: 40.5
+
+    # WGEN weather generator configuration (optional)
+    # Note: latitude and elevation are now in the site: block
+    wgen_config:
+      param_file: data/wgen_params.csv
+      txmd: 18.5      # Mean Tmax dry (°C)
+      txmw: 15.3      # Mean Tmax wet (°C)
+      tn: 4.7         # Mean Tmin (°C)
+      atx: 15.1       # Amplitude Tmax (°C)
+      atn: 11.7       # Amplitude Tmin (°C)
+      cvtx: 0.01675   # CV Tmax mean
+      acvtx: -0.00383 # CV Tmax amplitude
+      cvtn: 0.01605   # CV Tmin mean
+      acvtn: -0.00345 # CV Tmin amplitude
+      dt_day: 200     # Peak temperature day
+      seed: 42        # Optional: random seed
 
   # Visualization settings
   visualization:

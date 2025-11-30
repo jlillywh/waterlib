@@ -14,3 +14,17 @@ repos:
         language: python
         types: [python]
         pass_filenames: false
+
+      - id: waterlib-lint
+        name: Waterlib Architecture Lint
+        entry: python scripts/check_kernel_imports.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: doc-sync-check
+        name: Documentation Sync Check
+        entry: python scripts/check_doc_sync.py
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]

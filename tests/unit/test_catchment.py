@@ -9,6 +9,7 @@ import pytest
 from datetime import datetime
 from waterlib.components.catchment import Catchment
 from waterlib.core.exceptions import ConfigurationError
+from waterlib.core.base import SiteConfig
 
 
 # Mock driver for testing
@@ -51,12 +52,13 @@ class TestCatchmentInitialization:
 
     def test_catchment_init_with_snow_and_awbm(self):
         """Test Catchment initialization with both Snow17 and AWBM parameters."""
+        site = SiteConfig(latitude=45.0, elevation_m=1500.0)
+
         catchment = Catchment(
             name='test_catchment',
             area=100.0,
+            _site=site,
             snow17_params={
-                'latitude': 45.0,
-                'elevation': 1500.0,
                 'ref_elevation': 1000.0,
                 'mfmax': 1.2,
                 'mfmin': 0.6,
@@ -73,6 +75,8 @@ class TestCatchmentInitialization:
         assert catchment.name == 'test_catchment'
         assert catchment.area == 100.0
         assert catchment.has_snow is True
+        assert catchment.latitude == 45.0
+        assert catchment.elevation == 1500.0
         assert catchment.snow17_params is not None
         assert catchment.snow17_params.mfmax == 1.2
         assert catchment.snow17_params.scf == 1.1
@@ -218,14 +222,15 @@ class TestCatchmentInitialization:
 class TestCatchmentStep:
     """Test Catchment.step orchestrates both kernels correctly."""
 
-    def test_catchment_step_with_snow_and_awbm(self):
-        """Test that Catchment.step orchestrates Snow17 and AWBM kernels."""
+    def test_catchment_multiple_timesteps(self):
+        """Test that catchment maintains state across multiple timesteps."""
+        site = SiteConfig(latitude=45.0, elevation_m=1500.0)
+
         catchment = Catchment(
             name='test_catchment',
             area=100.0,
+            _site=site,
             snow17_params={
-                'latitude': 45.0,
-                'elevation': 1500.0,
                 'ref_elevation': 1000.0,
                 'mfmax': 1.2,
                 'mfmin': 0.6,
@@ -301,12 +306,13 @@ class TestCatchmentStep:
 
     def test_catchment_step_warm_temperature_melt(self):
         """Test that Catchment produces melt at warm temperatures."""
+        site = SiteConfig(latitude=45.0, elevation_m=1500.0)
+
         catchment = Catchment(
             name='test_catchment',
             area=100.0,
+            _site=site,
             snow17_params={
-                'latitude': 45.0,
-                'elevation': 1500.0,
                 'ref_elevation': 1000.0,
                 'mfmax': 1.2,
                 'mfmin': 0.6,
@@ -431,12 +437,13 @@ class TestCatchmentOutputFormat:
 
     def test_catchment_swe_aliases(self):
         """Test that swe_mm and snow_water_equivalent are aliases."""
+        site = SiteConfig(latitude=45.0, elevation_m=1500.0)
+
         catchment = Catchment(
             name='test_catchment',
             area=100.0,
+            _site=site,
             snow17_params={
-                'latitude': 45.0,
-                'elevation': 1500.0,
                 'ref_elevation': 1000.0
             },
             awbm_params={
@@ -523,12 +530,13 @@ class TestCatchmentVariousInputs:
 
     def test_catchment_multiple_timesteps(self):
         """Test Catchment over multiple timesteps maintains state."""
+        site = SiteConfig(latitude=45.0, elevation_m=1500.0)
+
         catchment = Catchment(
             name='test_catchment',
             area=100.0,
+            _site=site,
             snow17_params={
-                'latitude': 45.0,
-                'elevation': 1500.0,
                 'ref_elevation': 1000.0
             },
             awbm_params={

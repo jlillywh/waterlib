@@ -156,6 +156,29 @@ Below are the main outputs for each core component. Use these column names when 
 | `diversion.total_diverted` | Total water diverted (m³/day)                 |
 | `diversion.downstream_flow` | Remaining downstream flow (m³/day)           |
 | `diversion.[outflow_name]` | Individual outflow amounts (m³/day)           |
+
+### MetStation
+
+MetStation records climate data internally and provides export methods rather than timestep outputs.
+
+**Python API:**
+```python
+# Access MetStation component
+met = model.components['met_station']
+
+# Export to CSV
+met.export_csv('outputs/climate_data.csv')
+
+# Or get as DataFrame
+df = met.to_dataframe()
+```
+
+**DataFrame columns (depending on configuration):**
+- `precip_mm`: Precipitation (mm/day)
+- `tmin_c`: Minimum temperature (°C)
+- `tmax_c`: Maximum temperature (°C)
+- `solar_mjm2`: Solar radiation (MJ/m²/day)
+- `et0_mm`: Reference evapotranspiration (mm/day)
 """
 
 SAMPLE_MODEL_TEMPLATE = """name: "Baseline Water Supply Model"
@@ -256,6 +279,20 @@ components:
       y: 0.2
       color: '#FF6347'
       label: 'City'
+
+  # Optional: Record climate data for validation and analysis
+  # Uncomment to enable climate data logging
+  # met_station:
+  #   type: MetStation
+  #   log_precip: true
+  #   log_temp: true
+  #   log_solar: true
+  #   log_et0: true
+  #   meta:
+  #     x: 0.1
+  #     y: 0.9
+  #     color: '#FFD700'
+  #     label: 'Climate Station'
 """
 
 SAMPLE_SCRIPT_TEMPLATE = '''"""
@@ -310,6 +347,23 @@ def main():
 
     # Save results (already saved by run_simulation)
     print(f"\\nResults saved to: {results.csv_path}")
+
+    # Export climate data if MetStation is enabled
+    if 'met_station' in model.components:
+        met = model.components['met_station']
+        climate_path = OUTPUT_DIR / "climate_data.csv"
+        met.export_csv(climate_path)
+        print(f"Climate data exported to: {climate_path}")
+
+        # Show climate statistics
+        climate_df = met.to_dataframe()
+        if 'precip_mm' in climate_df.columns:
+            print(f"\\nClimate statistics:")
+            print(f"  Total precipitation: {climate_df['precip_mm'].sum():.1f} mm")
+            print(f"  Mean daily precip: {climate_df['precip_mm'].mean():.2f} mm")
+        if 'tmin_c' in climate_df.columns and 'tmax_c' in climate_df.columns:
+            mean_temp = (climate_df['tmin_c'] + climate_df['tmax_c']) / 2
+            print(f"  Mean temperature: {mean_temp.mean():.1f} °C")
 
     # Plot results (if matplotlib available)
     try:
